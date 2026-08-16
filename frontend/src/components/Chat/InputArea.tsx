@@ -230,7 +230,7 @@ export function InputArea() {
     setStreamState({
       conversationId: convId,
       isStreaming: true,
-      phase: deepResearch ? 'Researching...' : 'Generating...',
+      phase: deepResearch ? 'Researching...' : 'Jarvis is thinking...',
       elapsedMs: 0,
       activeToolCalls: [],
       content: '',
@@ -377,7 +377,7 @@ export function InputArea() {
         const eventName = sseEvent.event;
 
         if (eventName === 'agent_turn_start') {
-          setStreamState({ phase: 'Agent thinking...' });
+          setStreamState({ phase: 'Jarvis is thinking...' });
         } else if (eventName === 'inference_start') {
           setStreamState({ phase: 'Generating...' });
           useAppStore.getState().addLogEntry({
@@ -599,7 +599,7 @@ export function InputArea() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={selectedModel ? 'Message OpenJarvis...' : 'Pick a model first (⌘K)...'}
+          placeholder={selectedModel ? 'Message Jarvis...' : 'Pick a model first (⌘K)...'}
           rows={1}
           className="flex-1 bg-transparent outline-none resize-none text-sm leading-relaxed"
           style={{ color: 'var(--color-text)', maxHeight: '200px' }}
