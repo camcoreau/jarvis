@@ -1,7 +1,8 @@
 """Static security contract for CamCore member knowledge retrieval."""
 
-from pathlib import Path
+from __future__ import annotations
 
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ROUTES = ROOT / "src/openjarvis/server/camcore_portal_routes.py"
