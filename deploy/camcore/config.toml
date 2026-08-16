@@ -109,7 +109,6 @@ enabled = true
 skills_dir = "/data/skills"
 auto_discover = true
 auto_sync = false
-auto_update = false
 index_dir = "/data/skill-index"
 
 [compression]
