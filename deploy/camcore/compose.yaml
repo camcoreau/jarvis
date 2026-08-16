@@ -72,6 +72,7 @@ services:
       OPENJARVIS_HOME: /data
       OPENJARVIS_CONFIG: /etc/openjarvis/camcore-config.toml
       OPENJARVIS_API_KEY: ${OPENJARVIS_API_KEY:?Set OPENJARVIS_API_KEY before deployment}
+      CAMCORE_OUTLINE_API_KEY: ${CAMCORE_OUTLINE_API_KEY:?Set CAMCORE_OUTLINE_API_KEY before deployment}
       OPENJARVIS_NO_UPDATE_CHECK: "1"
       OLLAMA_HOST: http://ollama:11434
       TZ: ${CAMCORE_TZ:-Australia/Melbourne}
