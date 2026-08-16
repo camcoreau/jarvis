@@ -211,7 +211,8 @@ def test_admin_openai_uses_request_local_agent(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["model"] == "gpt-5.6"
-    assert "Operations via gpt-5.6" in response.json()["choices"][0]["message"]["content"]
+    content = response.json()["choices"][0]["message"]["content"]
+    assert "Operations via gpt-5.6" in content
     assert _OperationsAgent.models_used == ["gpt-5.6"]
     assert agent._model == "server-model"
 
