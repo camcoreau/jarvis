@@ -107,6 +107,17 @@ jobs:
       - name: Smoke-test Jarvis CLI
         run: docker run --rm camcore-jarvis:test --version
 
+      - name: Validate CamCore config in production image
+        shell: bash
+        run: |
+          docker run --rm \
+            --entrypoint python \
+            -e OPENJARVIS_HOME=/tmp/openjarvis \
+            -e OPENJARVIS_CONFIG=/etc/openjarvis/config.toml \
+            -v "$PWD/deploy/camcore/config.toml:/etc/openjarvis/config.toml:ro" \
+            camcore-jarvis:test \
+            -c 'from openjarvis.core.config import load_config; c=load_config(); assert c.server.agent == "camcore_assistant"; assert c.security.profile == "server"; assert c.analytics.enabled is False; assert c.telemetry.enabled is False; print("CamCore config ok")'
+
   publish:
     name: Publish immutable CamCore Jarvis image
     needs: validate-deployment
