@@ -65,9 +65,7 @@ _STOP_WORDS = {
 }
 
 _IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
-_PRIVATE_HOST_RE = re.compile(
-    r"\b(?:[a-z0-9-]+\.)+camcore\.network\b", re.IGNORECASE
-)
+_PRIVATE_HOST_RE = re.compile(r"\b(?:[a-z0-9-]+\.)+camcore\.network\b", re.IGNORECASE)
 _EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 _SECRET_LINE_RE = re.compile(
     r"(?:password|passwd|secret|api[_ -]?key|access[_ -]?token|refresh[_ -]?token|"
