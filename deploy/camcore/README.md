@@ -86,15 +86,38 @@ Create a private Proxy Host with:
 - Forward port: `8000`
 - Websockets: enabled
 - Block common exploits: enabled
+- Main Proxy Host **Advanced** configuration: leave empty for Jarvis-specific
+  authorization headers.
 
 The browser UI loads without API authentication, but `/v1` and `/api` are
-protected by `OPENJARVIS_API_KEY`. To avoid placing that key in every browser,
-add this to the Proxy Host **Advanced** configuration, replacing the placeholder
-with the same secret stored in Portainer:
+protected by `OPENJARVIS_API_KEY`. NPM must inject the key server-side so it is
+not stored in every browser.
+
+Create a **Custom Location** for `/` with the same upstream:
+
+- Location: `/`
+- Scheme: `http`
+- Forward hostname: `camcore-jarvis`
+- Forward port: `8000`
+
+Add this to that custom location's **Advanced** configuration, replacing the
+placeholder with the same secret stored in Portainer:
 
 ```nginx
 proxy_set_header Authorization "Bearer <OPENJARVIS_API_KEY>";
+
+# Jarvis chat uses Server-Sent Events. Do not buffer or cache the stream, and
+# allow long local-model turns to remain connected.
+proxy_buffering off;
+proxy_cache off;
+proxy_read_timeout 3600s;
+proxy_send_timeout 3600s;
 ```
+
+The authorization directive belongs inside the custom location because NPM's
+generated location block defines its own proxy headers. Putting the Jarvis
+Authorization header only in the Proxy Host's top-level Advanced configuration
+can leave the upstream request without the intended header.
 
 NPM then supplies the credential to Jarvis server-side. The API key must never
 be written into this repository or into a public-facing client bundle.
@@ -107,7 +130,8 @@ public internet service during the initial deployment.
 
 ## 6. Verify the deployment
 
-After Portainer reports the stack healthy:
+After Portainer reports the stack healthy, test from a CamCore client that can
+reach the private NPM endpoint:
 
 ```bash
 curl -I https://jarvis.camcore.network/
@@ -116,6 +140,22 @@ curl -s https://jarvis.camcore.network/v1/models
 
 The first request should return the Jarvis UI. The second should return the
 available model list through NPM's server-side authorization header.
+
+Verify the SSE chat path separately with a streaming client. A healthy request
+returns an OpenAI-compatible sequence and finishes with `data: [DONE]`:
+
+```bash
+curl -N \
+  -H 'Content-Type: application/json' \
+  --data-binary @jarvis-test.json \
+  https://jarvis.camcore.network/v1/chat/completions
+```
+
+Example `jarvis-test.json`:
+
+```json
+{"model":"qwen3.5:4b","messages":[{"role":"user","content":"Reply with exactly OK"}],"stream":true}
+```
 
 In Portainer, confirm:
 
@@ -162,6 +202,7 @@ The initial production profile is deliberately conservative:
 - no public host ports;
 - API-key enforcement;
 - external analytics disabled;
+- public savings/leaderboard sharing disabled in the CamCore frontend;
 - write/shell tools disabled;
 - security profile set to `server` / `block`;
 - audit logging enabled;
