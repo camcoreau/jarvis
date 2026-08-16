@@ -1,10 +1,20 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { MessageBubble } from './MessageBubble';
 import { InputArea } from './InputArea';
 import { StreamingDots } from './StreamingDots';
 import { useAppStore } from '../../lib/store';
-import { Sparkles, PanelRightOpen, PanelRightClose, Database, MessageSquare, X } from 'lucide-react';
+import {
+  PanelRightOpen,
+  PanelRightClose,
+  Database,
+  MessageSquare,
+  X,
+  ShieldCheck,
+  Activity,
+  LockKeyhole,
+  Network,
+} from 'lucide-react';
 import { listConnectors } from '../../lib/connectors-api';
 
 function getGreeting(): string {
@@ -28,7 +38,6 @@ export function ChatArea() {
   const isCurrentChatStreaming = streamState.isStreaming && streamState.conversationId === activeId;
   const currentStreamContent = isCurrentChatStreaming ? streamState.content : '';
 
-  // Check if any data sources are connected
   const [hasConnectedSources, setHasConnectedSources] = useState<boolean | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
@@ -39,8 +48,6 @@ export function ChatArea() {
   }, []);
 
   useEffect(() => {
-    // Sending a message always pins the view to the bottom, even if the
-    // user had scrolled up to read earlier messages.
     if (isCurrentChatStreaming && !wasStreaming.current) {
       shouldAutoScroll.current = true;
     }
@@ -57,29 +64,21 @@ export function ChatArea() {
     const scrolledUp = scrollTop < lastScrollTop.current;
     lastScrollTop.current = scrollTop;
     if (scrolledUp && distance >= 1) {
-      // Any upward scroll away from the bottom stops autoscroll immediately,
-      // so streaming content never fights the user (no jitter). Sub-1px
-      // upward movement (elastic bounce settling at the bottom) is ignored.
       shouldAutoScroll.current = false;
     } else if (!scrolledUp) {
-      // Re-engage when scrolled back to the bottom. < 2 rather than < 1:
-      // at fractional zoom levels the at-bottom residual can reach 1px,
-      // which would otherwise leave autoscroll permanently disengaged.
       shouldAutoScroll.current = distance < 2;
     }
   };
 
   const isEmpty = messages.length === 0 && !isCurrentChatStreaming;
-
   const PanelIcon = systemPanelOpen ? PanelRightClose : PanelRightOpen;
 
   return (
     <div className="flex flex-col h-full">
-      {/* Toggle bar */}
       <div className="flex items-center justify-end px-3 py-1.5 shrink-0">
         <button
           onClick={toggleSystemPanel}
-          className="p-1.5 rounded-md transition-colors cursor-pointer"
+          className="p-1.5 rounded-lg transition-colors cursor-pointer"
           style={{ color: 'var(--color-text-tertiary)' }}
           title={`${systemPanelOpen ? 'Hide' : 'Show'} system panel (${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+I)`}
         >
@@ -87,22 +86,18 @@ export function ChatArea() {
         </button>
       </div>
 
-      {/* Data sources banner */}
       {hasConnectedSources === false && !bannerDismissed && (
         <div
-          className="mx-4 mb-2 flex items-center gap-3 px-4 py-3 rounded-lg text-sm shrink-0"
-          style={{
-            background: 'var(--color-accent-subtle)',
-            border: '1px solid var(--color-border)',
-          }}
+          className="camcore-source-banner mx-4 mb-2 flex items-center gap-3 px-4 py-3 rounded-xl text-sm shrink-0"
+          style={{ border: '1px solid var(--color-border)' }}
         >
           <Database size={16} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
           <span style={{ color: 'var(--color-text-secondary)', flex: 1 }}>
-            Connect your data sources (Gmail, iMessage, Slack, etc.) to get personalized answers.
+            Connect trusted data sources to give Jarvis useful CamCore context.
           </span>
           <button
             onClick={() => navigate('/data-sources')}
-            className="px-3 py-1 rounded text-xs font-medium cursor-pointer"
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer"
             style={{ background: 'var(--color-accent)', color: 'var(--color-on-accent)', border: 'none' }}
           >
             Connect
@@ -111,68 +106,81 @@ export function ChatArea() {
             onClick={() => setBannerDismissed(true)}
             className="p-1 rounded cursor-pointer"
             style={{ color: 'var(--color-text-tertiary)', background: 'transparent', border: 'none' }}
+            aria-label="Dismiss data source notice"
           >
             <X size={14} />
           </button>
         </div>
       )}
+
       <div
         ref={listRef}
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto"
       >
         {isEmpty ? (
-          <div className="flex flex-col items-center justify-center h-full px-4">
-            <div
-              className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4"
-              style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)' }}
-            >
-              <Sparkles size={24} />
-            </div>
-            <h2 className="text-xl font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
-              {getGreeting()}
-            </h2>
-            <p className="text-sm text-center max-w-sm mb-6" style={{ color: 'var(--color-text-secondary)' }}>
-              Ask anything. Your AI runs locally — private, fast, and always available.
-            </p>
+          <div className="flex items-center justify-center min-h-full px-4 py-8">
+            <section className="camcore-hero" aria-labelledby="camcore-jarvis-greeting">
+              <div className="camcore-hero-mark" aria-hidden="true">
+                <ShieldCheck size={24} />
+              </div>
+              <p className="camcore-hero-eyebrow">Jarvis · CamCore AI</p>
+              <h2 id="camcore-jarvis-greeting">
+                {getGreeting()}. <span className="camcore-gradient-text">What needs attention?</span>
+              </h2>
+              <p className="camcore-hero-description">
+                Your private operations assistant for CamCore. Ask about systems, investigate an issue,
+                work with connected information, or plan a change before it touches production.
+              </p>
 
-            {/* Quick action hints */}
-            <div className="flex gap-3">
-              <button
-                onClick={() => navigate('/data-sources')}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs cursor-pointer transition-colors"
-                style={{
-                  background: 'var(--color-bg-secondary)',
-                  border: '1px solid var(--color-border)',
-                  color: 'var(--color-text-secondary)',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
-                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--color-border)')}
-              >
-                <Database size={14} style={{ color: 'var(--color-accent)' }} />
-                Connect Data Sources
-              </button>
-              <button
-                onClick={() => { navigate('/data-sources'); setTimeout(() => window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'messaging' })), 100); }}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs cursor-pointer transition-colors"
-                style={{
-                  background: 'var(--color-bg-secondary)',
-                  border: '1px solid var(--color-border)',
-                  color: 'var(--color-text-secondary)',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
-                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--color-border)')}
-              >
-                <MessageSquare size={14} style={{ color: 'var(--color-accent)' }} />
-                Set Up Messaging Channels
-              </button>
-            </div>
+              <div className="camcore-capabilities" aria-label="Jarvis operating principles">
+                <span className="camcore-capability"><LockKeyhole size={12} /> Private by design</span>
+                <span className="camcore-capability"><Activity size={12} /> Verify before change</span>
+                <span className="camcore-capability"><Network size={12} /> CamCore aware</span>
+              </div>
+
+              <div className="camcore-quick-actions">
+                <button className="camcore-quick-action" onClick={() => navigate('/dashboard')}>
+                  <span className="camcore-quick-action-icon"><Activity size={16} /></span>
+                  <span>
+                    <strong>Open operations</strong>
+                    <span>Review system activity, metrics and current state.</span>
+                  </span>
+                </button>
+                <button className="camcore-quick-action" onClick={() => navigate('/data-sources')}>
+                  <span className="camcore-quick-action-icon"><Database size={16} /></span>
+                  <span>
+                    <strong>Connect context</strong>
+                    <span>Add approved sources Jarvis can use when answering.</span>
+                  </span>
+                </button>
+                <button className="camcore-quick-action" onClick={() => navigate('/agents')}>
+                  <span className="camcore-quick-action-icon"><Network size={16} /></span>
+                  <span>
+                    <strong>Manage agents</strong>
+                    <span>Inspect scheduled and persistent Jarvis workloads.</span>
+                  </span>
+                </button>
+                <button
+                  className="camcore-quick-action"
+                  onClick={() => {
+                    navigate('/data-sources');
+                    setTimeout(() => window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'messaging' })), 100);
+                  }}
+                >
+                  <span className="camcore-quick-action-icon"><MessageSquare size={16} /></span>
+                  <span>
+                    <strong>Messaging channels</strong>
+                    <span>Configure approved ways to interact with Jarvis.</span>
+                  </span>
+                </button>
+              </div>
+            </section>
           </div>
         ) : (
           <div className="max-w-[var(--chat-max-width)] mx-auto px-4 py-6">
             {messages.map((msg, i) => {
-              const isLastAssistant =
-                i === messages.length - 1 && msg.role === 'assistant';
+              const isLastAssistant = i === messages.length - 1 && msg.role === 'assistant';
               return (
                 <MessageBubble
                   key={msg.id}
@@ -183,8 +191,6 @@ export function ChatArea() {
             })}
             {(() => {
               if (!isCurrentChatStreaming || streamState.content !== '') return null;
-              // For research messages the ResearchTimeline handles its own
-              // pre-content loading state — suppress the generic dots.
               const last = messages[messages.length - 1];
               if (last?.role === 'assistant' && last.isResearch) return null;
               return (
