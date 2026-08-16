@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import importlib
 from unittest.mock import MagicMock
 
+import openjarvis.agents.camcore_assistant as camcore_assistant_module
 from openjarvis.agents.camcore_assistant import (
     CAMCORE_SYSTEM_PROMPT,
     CamCoreAssistantAgent,
@@ -26,8 +28,12 @@ def _make_engine(content: str = "CamCore is healthy.") -> MagicMock:
 
 class TestCamCoreAssistantAgent:
     def test_registered(self):
+        # tests/conftest.py clears registries before every test. Reload the module
+        # to exercise the same decorator-based registration used at app startup.
+        module = importlib.reload(camcore_assistant_module)
+
         assert AgentRegistry.contains("camcore_assistant")
-        assert AgentRegistry.get("camcore_assistant") is CamCoreAssistantAgent
+        assert AgentRegistry.get("camcore_assistant") is module.CamCoreAssistantAgent
 
     def test_agent_id(self):
         agent = CamCoreAssistantAgent(_make_engine(), "test-model")
