@@ -101,6 +101,98 @@ class TestLoaderTokenPlumbing:
             token="ha-llat-secret",
         )
 
+    def test_token_env_passed_to_streamable_http(self, _mock_mcp_stack):
+        """token_env resolves a bearer token without storing it in config."""
+        from openjarvis.mcp.loader import load_mcp_tools_from_config
+
+        cfg = _make_mcp_cfg(
+            enabled=True,
+            servers=[
+                {
+                    "name": "outline",
+                    "url": "https://docs.example.test/mcp",
+                    "token_env": "OUTLINE_API_KEY",
+                }
+            ],
+        )
+        with patch.dict("os.environ", {"OUTLINE_API_KEY": "outline-secret"}):
+            load_mcp_tools_from_config(cfg)
+
+        _mock_mcp_stack["http"].assert_called_once_with(
+            url="https://docs.example.test/mcp",
+            token="outline-secret",
+        )
+
+    def test_missing_token_env_skips_server(self, _mock_mcp_stack, caplog):
+        """Fail closed when an authenticated MCP environment secret is absent."""
+        from openjarvis.mcp.loader import load_mcp_tools_from_config
+
+        cfg = _make_mcp_cfg(
+            enabled=True,
+            servers=[
+                {
+                    "name": "outline",
+                    "url": "https://docs.example.test/mcp",
+                    "token_env": "OUTLINE_API_KEY",
+                }
+            ],
+        )
+        with patch.dict("os.environ", {}, clear=True), caplog.at_level("WARNING"):
+            tools, clients = load_mcp_tools_from_config(cfg)
+
+        assert tools == []
+        assert clients == []
+        _mock_mcp_stack["http"].assert_not_called()
+        assert any(
+            "OUTLINE_API_KEY" in record.message and "not set" in record.message
+            for record in caplog.records
+        )
+
+    def test_blank_token_env_skips_server(self, _mock_mcp_stack, caplog):
+        """An explicit but blank token_env must not downgrade to anonymous access."""
+        from openjarvis.mcp.loader import load_mcp_tools_from_config
+
+        cfg = _make_mcp_cfg(
+            enabled=True,
+            servers=[
+                {
+                    "name": "outline",
+                    "url": "https://docs.example.test/mcp",
+                    "token_env": "",
+                }
+            ],
+        )
+        with caplog.at_level("WARNING"):
+            tools, clients = load_mcp_tools_from_config(cfg)
+
+        assert tools == []
+        assert clients == []
+        _mock_mcp_stack["http"].assert_not_called()
+        assert any("invalid token_env" in record.message for record in caplog.records)
+
+    def test_literal_token_takes_precedence_over_token_env(self, _mock_mcp_stack):
+        """Existing literal token configs remain backward compatible."""
+        from openjarvis.mcp.loader import load_mcp_tools_from_config
+
+        cfg = _make_mcp_cfg(
+            enabled=True,
+            servers=[
+                {
+                    "name": "legacy",
+                    "url": "http://localhost:9583/mcp",
+                    "token": "literal-secret",
+                    "token_env": "MISSING_TOKEN",
+                }
+            ],
+        )
+        with patch.dict("os.environ", {}, clear=True):
+            load_mcp_tools_from_config(cfg)
+
+        _mock_mcp_stack["http"].assert_called_once_with(
+            url="http://localhost:9583/mcp",
+            token="literal-secret",
+        )
+
     def test_no_token_passes_none(self, _mock_mcp_stack):
         """Missing token in cfg → token=None (not 'undefined' or KeyError)."""
         from openjarvis.mcp.loader import load_mcp_tools_from_config

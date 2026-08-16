@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
@@ -45,6 +46,13 @@ def load_mcp_tools_from_config(
     ``allowed_names`` is an outer filter applied after each server's
     own include/exclude filter. Pass the caller's `--tools`/`enabled`
     list to honour CLI scoping; pass ``None`` to take every tool.
+
+    HTTP server tokens may be supplied directly with ``token`` for backward
+    compatibility or indirectly with ``token_env``. When ``token_env`` is set,
+    the secret is resolved from the process environment at runtime and is never
+    written back to configuration or logs. A missing/empty referenced variable
+    causes that MCP server to be skipped so authenticated integrations fail
+    closed instead of silently connecting without credentials.
 
     Returns ``([], [])`` when mcp is disabled or no servers are
     configured — no exception, no warning.
@@ -86,10 +94,27 @@ def load_mcp_tools_from_config(
             name = cfg.get("name", "<unnamed>")
             url = cfg.get("url")
             token = cfg.get("token")
+            token_env = cfg.get("token_env")
             command = cfg.get("command", "")
             args = cfg.get("args", [])
 
             if url:
+                if token is None and token_env is not None:
+                    if not isinstance(token_env, str) or not token_env.strip():
+                        logger.warning(
+                            "MCP server '%s' has an invalid token_env value — skipping",
+                            name,
+                        )
+                        continue
+                    token = os.environ.get(token_env)
+                    if not token:
+                        logger.warning(
+                            "MCP server '%s' token environment variable '%s' "
+                            "is not set — skipping",
+                            name,
+                            token_env,
+                        )
+                        continue
                 transport = StreamableHTTPTransport(url=url, token=token)
             elif command:
                 transport = StdioTransport(command=[command] + args)

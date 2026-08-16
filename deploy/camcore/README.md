@@ -19,6 +19,9 @@ Manager (NPM) instance.
 - The CamCore production `config.toml` is baked into the immutable Jarvis image
   at `/etc/openjarvis/camcore-config.toml`. The Portainer stack does not rely on
   bind mounts from Portainer's temporary Git checkout.
+- CamCore documentation is available to Jarvis through Outline's Streamable HTTP
+  MCP endpoint at `https://docs.camcore.network/mcp`. The CamCore profile exposes
+  only the read-only `list_documents` and `fetch` tools.
 
 The deployment intentionally remains private. Do not create a public proxy host
 or public DNS record for Jarvis during the foundation phase.
@@ -63,11 +66,23 @@ CAMCORE_JARVIS_RELEASE=<published main commit SHA>
 CAMCORE_JARVIS_MODEL=qwen3.5:4b
 CAMCORE_PROXY_NETWORK=<existing NPM Docker network>
 OPENJARVIS_API_KEY=<generated secret>
+CAMCORE_OUTLINE_API_KEY=<read-only Outline API key>
 CAMCORE_TZ=Australia/Melbourne
 ```
 
 `CAMCORE_JARVIS_RELEASE` must be an immutable image tag published by the
 CamCore image workflow. Do not use `latest`.
+
+`CAMCORE_OUTLINE_API_KEY` is resolved only at runtime through the MCP server's
+`token_env` setting. The real credential must exist only in Portainer (or another
+runtime secret store) and must never be written into `config.toml`, this
+repository, a URL, or client-side code.
+
+The Outline credential should be limited to the `documents.list` and
+`documents.info` scopes. Those scopes are sufficient for the configured MCP
+`list_documents` search tool and `fetch` document reader. The Jarvis config also
+applies an `include_tools` allowlist for those two tools so Outline write-capable
+tools are not exposed to the CamCore agent.
 
 The compose file intentionally contains no repository-file `configs:` mount.
 This avoids Portainer Git-stack deployments failing when their temporary checkout
@@ -122,13 +137,38 @@ can leave the upstream request without the intended header.
 NPM then supplies the credential to Jarvis server-side. The API key must never
 be written into this repository or into a public-facing client bundle.
 
-## 5. Internal DNS only
+## 5. Outline knowledge access
+
+Jarvis connects directly to the existing private Outline endpoint configured as:
+
+```text
+https://docs.camcore.network/mcp
+```
+
+Outline's MCP route accepts bearer authentication and filters available tools by
+the scopes attached to the authenticated token. The CamCore profile additionally
+filters discovery to:
+
+- `list_documents` — full-text search/listing of accessible documents.
+- `fetch` — retrieve the selected document's full content.
+
+Jarvis is instructed to consult this source for documented CamCore architecture,
+server roles, services, policies, standards, procedures and configuration. It
+must not treat documentation as proof that a host or service is currently online.
+Live health should come from a monitoring integration when one is added.
+
+If the Outline MCP integration cannot authenticate, Jarvis should continue to
+run without those tools and log the discovery failure. The Docker stack itself
+requires `CAMCORE_OUTLINE_API_KEY`, preventing an accidental deployment that
+omits the configured credential entirely.
+
+## 6. Internal DNS only
 
 Create the internal DNS record for `jarvis.camcore.network` so CamCore clients
 resolve it to the private reverse-proxy path. Do not publish the hostname as a
 public internet service during the initial deployment.
 
-## 6. Verify the deployment
+## 7. Verify the deployment
 
 After Portainer reports the stack healthy, test from a CamCore client that can
 reach the private NPM endpoint:
@@ -156,6 +196,19 @@ Example `jarvis-test.json`:
 ```json
 {"model":"qwen3.5:4b","messages":[{"role":"user","content":"Reply with exactly OK"}],"stream":true}
 ```
+
+In the Jarvis startup logs, verify that Outline discovery succeeds and reports
+two tools from `camcore-outline`, for example:
+
+```text
+Discovered 2 MCP tools from server 'camcore-outline'
+```
+
+Then use a knowledge-grounding test such as:
+
+> Who or what are Earth, Jupiter, Ganymede, Saturn, Mars, Venus and Europa in
+> CamCore? Search the CamCore knowledge base before answering. Tell me which
+> documentation you used and do not guess.
 
 In Portainer, confirm:
 
@@ -196,13 +249,15 @@ audit data, traces, skills and session state and should be treated as sensitive.
 
 ## Security posture
 
-The initial production profile is deliberately conservative:
+The production profile is deliberately conservative:
 
 - local Ollama inference;
 - no public host ports;
 - API-key enforcement;
 - external analytics disabled;
 - public savings/leaderboard sharing disabled in the CamCore frontend;
+- Outline MCP credentials supplied only at runtime;
+- Outline MCP discovery restricted to `list_documents` and `fetch`;
 - write/shell tools disabled;
 - security profile set to `server` / `block`;
 - audit logging enabled;
