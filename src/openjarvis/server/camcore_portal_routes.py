@@ -43,7 +43,10 @@ _MAX_MESSAGE_CHARS = 12_000
 _MAX_TOKENS = 2_048
 
 
-def _member_request(request_body: ChatCompletionRequest, model: str) -> ChatCompletionRequest:
+def _member_request(
+    request_body: ChatCompletionRequest,
+    model: str,
+) -> ChatCompletionRequest:
     history: list[ChatMessage] = []
     for message in request_body.messages:
         if message.role not in {"user", "assistant"}:
@@ -89,7 +92,10 @@ async def camcore_member_chat(request_body: ChatCompletionRequest, request: Requ
     engine = request.app.state.engine
     model = str(getattr(request.app.state, "model", "") or request_body.model).strip()
     if not model:
-        raise HTTPException(status_code=503, detail="CamCore portal model is unavailable")
+        raise HTTPException(
+            status_code=503,
+            detail="CamCore portal model is unavailable",
+        )
 
     safe_request = _member_request(request_body, model)
 
