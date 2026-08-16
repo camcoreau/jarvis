@@ -88,8 +88,8 @@ def _knowledge_agent():
             "## Server roles",
             "Earth is the CamCore storage and NAS host.",
             "OPENAI_API_KEY=must-not-reach-member-model",
-            "Management address: 192.168.5.25",
-            "Private portal: docs.camcore.network",
+            "Earth management address: 192.168.5.25",
+            "Earth private portal: docs.camcore.network",
         ]
     )
 
@@ -162,6 +162,7 @@ def test_member_stream_keeps_sanitized_knowledge_context():
     assert "APPROVED CAMCORE MEMBER KNOWLEDGE" in system_prompt
     assert "Earth is the CamCore storage and NAS host." in system_prompt
     assert "192.168.5.25" not in system_prompt
+    assert "docs.camcore.network" not in system_prompt
     agent.run.assert_not_called()
 
 
