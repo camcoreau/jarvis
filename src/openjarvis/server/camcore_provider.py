@@ -50,11 +50,19 @@ def openai_model(environment: Mapping[str, str] | None = None) -> str:
     return str(env.get("CAMCORE_OPENAI_MODEL", "gpt-5.6")).strip() or "gpt-5.6"
 
 
-def _engine_has_model(engine: object, model: str) -> bool:
+def _engine_has_openai(engine: object, model: str) -> bool:
     try:
-        return model in set(engine.list_models())
+        models = set(engine.list_models())
     except Exception:
         return False
+    if model in models:
+        return True
+    # MultiEngine advertises the CloudEngine's curated model list.  A newly
+    # released gpt-* alias can still be routable before that curated list is
+    # updated, so the presence of any advertised gpt-* model proves that the
+    # OpenAI client is active and MultiEngine can route the requested alias by
+    # its gpt-* prefix.
+    return model.startswith("gpt-") and any(item.startswith("gpt-") for item in models)
 
 
 def openai_available(
@@ -67,7 +75,7 @@ def openai_available(
         return False
     if not str(env.get("OPENAI_API_KEY", "")).strip():
         return False
-    return _engine_has_model(engine, openai_model(env))
+    return _engine_has_openai(engine, openai_model(env))
 
 
 @dataclass(frozen=True, slots=True)
