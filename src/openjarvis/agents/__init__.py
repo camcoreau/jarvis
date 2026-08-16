@@ -25,6 +25,11 @@ except ImportError:
     pass
 
 try:
+    import openjarvis.agents.camcore_assistant  # noqa: F401
+except ImportError:
+    pass
+
+try:
     import openjarvis.agents.native_react  # noqa: F401
 except ImportError:
     pass
