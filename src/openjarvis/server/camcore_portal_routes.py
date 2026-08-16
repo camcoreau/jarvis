@@ -58,10 +58,22 @@ Keep answers clear, practical and appropriately concise. Use Australian English.
 _MAX_HISTORY_MESSAGES = 24
 _MAX_MESSAGE_CHARS = 12_000
 _MAX_TOKENS = 2_048
+_LOCAL_TEMPERATURE = 0.2
+_OPENAI_TEMPERATURE = 1.0
 
 
 def _requested_provider(request: Request) -> str:
     return str(request.headers.get("X-CamCore-Provider", "auto") or "auto")
+
+
+def _generation_temperature(provider: str) -> float:
+    """Return a model-compatible temperature for the selected provider.
+
+    GPT-5.6 accepts only its default temperature. Local Ollama inference keeps
+    CamCore's lower deterministic temperature.
+    """
+
+    return _OPENAI_TEMPERATURE if provider == "openai" else _LOCAL_TEMPERATURE
 
 
 def _local_model(
@@ -82,6 +94,8 @@ def _local_model(
 def _member_request(
     request_body: ChatCompletionRequest,
     model: str,
+    *,
+    temperature: float = _LOCAL_TEMPERATURE,
 ) -> ChatCompletionRequest:
     history: list[ChatMessage] = []
     for message in request_body.messages:
@@ -107,7 +121,7 @@ def _member_request(
             ChatMessage(role="system", content=_MEMBER_SYSTEM_PROMPT),
             *history,
         ],
-        temperature=0.2,
+        temperature=temperature,
         max_tokens=min(max(1, request_body.max_tokens), _MAX_TOKENS),
         stream=request_body.stream,
         tools=None,
@@ -148,12 +162,19 @@ async def _member_stream(engine, request_body: ChatCompletionRequest, decision):
         )
         yield f"data: {first_chunk.model_dump_json()}\n\n"
 
-        async def run_model(run_model: str):
-            messages = _to_messages(_member_request(request_body, run_model).messages)
+        async def run_model(run_model: str, provider: str):
+            temperature = _generation_temperature(provider)
+            messages = _to_messages(
+                _member_request(
+                    request_body,
+                    run_model,
+                    temperature=temperature,
+                ).messages
+            )
             async for token in engine.stream(
                 messages,
                 model=run_model,
-                temperature=0.2,
+                temperature=temperature,
                 max_tokens=min(max(1, request_body.max_tokens), _MAX_TOKENS),
             ):
                 if token:
@@ -161,7 +182,7 @@ async def _member_stream(engine, request_body: ChatCompletionRequest, decision):
 
         emitted = False
         try:
-            async for token in run_model(model):
+            async for token in run_model(model, selected):
                 emitted = True
                 content_chunk = ChatCompletionChunk(
                     id=chunk_id,
@@ -181,7 +202,7 @@ async def _member_stream(engine, request_body: ChatCompletionRequest, decision):
                 )
                 model = decision.local_model
                 yield _provider_event("local", model, "openai")
-                async for token in run_model(model):
+                async for token in run_model(model, "local"):
                     content_chunk = ChatCompletionChunk(
                         id=chunk_id,
                         model=model,
@@ -264,6 +285,7 @@ async def _operations_stream(
                 )
                 provider = "local"
                 model = decision.local_model
+                request_body.temperature = _LOCAL_TEMPERATURE
                 yield _provider_event(provider, model, "openai")
                 response = await asyncio.to_thread(
                     _handle_agent,
@@ -332,7 +354,11 @@ async def camcore_member_chat(request_body: ChatCompletionRequest, request: Requ
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    safe_request = _member_request(request_body, decision.model)
+    safe_request = _member_request(
+        request_body,
+        decision.model,
+        temperature=_generation_temperature(decision.selected),
+    )
     if safe_request.stream:
         return await _member_stream(engine, safe_request, decision)
 
@@ -349,7 +375,11 @@ async def camcore_member_chat(request_body: ChatCompletionRequest, request: Requ
     except Exception:
         if decision.selected != "openai" or not decision.fallback_allowed:
             raise
-        fallback_request = _member_request(request_body, decision.local_model)
+        fallback_request = _member_request(
+            request_body,
+            decision.local_model,
+            temperature=_LOCAL_TEMPERATURE,
+        )
         return await asyncio.to_thread(
             _handle_direct,
             engine,
@@ -387,6 +417,7 @@ async def camcore_operations_chat(
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
+    request_body.temperature = _generation_temperature(decision.selected)
     if decision.selected == "local":
         request_body.model = decision.local_model
         return await chat_completions(request_body, request)
@@ -414,6 +445,7 @@ async def camcore_operations_chat(
     except Exception:
         if not decision.fallback_allowed:
             raise
+        request_body.temperature = _LOCAL_TEMPERATURE
         return await asyncio.to_thread(
             _handle_agent,
             _agent_for_model(agent, decision.local_model),
