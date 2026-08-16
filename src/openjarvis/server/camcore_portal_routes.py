@@ -1,7 +1,7 @@
 """CamCore portal-specific API routes.
 
 The public CamCore member portal must never inherit the operations agent's
-server-side tools or memory context.  Administrators may use the operations
+server-side tools or memory context. Administrators may use the operations
 agent, but cloud use is explicit and policy-controlled so operational memory is
 not silently exported to an external model provider.
 """
@@ -64,12 +64,18 @@ def _requested_provider(request: Request) -> str:
     return str(request.headers.get("X-CamCore-Provider", "auto") or "auto")
 
 
-def _local_model(request: Request, request_body: ChatCompletionRequest | None = None) -> str:
+def _local_model(
+    request: Request,
+    request_body: ChatCompletionRequest | None = None,
+) -> str:
     model = str(getattr(request.app.state, "model", "") or "").strip()
     if not model and request_body is not None:
         model = str(request_body.model or "").strip()
     if not model:
-        raise HTTPException(status_code=503, detail="CamCore portal model is unavailable")
+        raise HTTPException(
+            status_code=503,
+            detail="CamCore portal model is unavailable",
+        )
     return model
 
 
@@ -108,7 +114,11 @@ def _member_request(
     )
 
 
-def _provider_event(provider: str, model: str, fallback_from: str | None = None) -> str:
+def _provider_event(
+    provider: str,
+    model: str,
+    fallback_from: str | None = None,
+) -> str:
     payload = {"provider": provider, "model": model}
     if fallback_from:
         payload["fallbackFrom"] = fallback_from
@@ -165,7 +175,10 @@ async def _member_stream(engine, request_body: ChatCompletionRequest, decision):
                 and decision.fallback_allowed
                 and not emitted
             ):
-                logger.warning("OpenAI member chat failed; falling back local: %s", exc)
+                logger.warning(
+                    "OpenAI member chat failed; falling back local: %s",
+                    exc,
+                )
                 model = decision.local_model
                 yield _provider_event("local", model, "openai")
                 async for token in run_model(model):
@@ -198,16 +211,23 @@ def _agent_for_model(agent, model: str):
 
     cloned = copy.copy(agent)
     cloned._model = model
-    # Loop guards may hold per-run state.  The cloud clone starts clean while
+    # Loop guards may hold per-run state. The cloud clone starts clean while
     # reusing the immutable tool list/executor and the process-owned MCP clients.
     cloned._loop_guard = None
     return cloned
 
 
-async def _operations_stream(request_body: ChatCompletionRequest, request: Request, decision):
+async def _operations_stream(
+    request_body: ChatCompletionRequest,
+    request: Request,
+    decision,
+):
     agent = getattr(request.app.state, "agent", None)
     if agent is None:
-        raise HTTPException(status_code=503, detail="CamCore operations agent unavailable")
+        raise HTTPException(
+            status_code=503,
+            detail="CamCore operations agent unavailable",
+        )
 
     chunk_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
     bus = getattr(request.app.state, "bus", None)
@@ -238,7 +258,10 @@ async def _operations_stream(request_body: ChatCompletionRequest, request: Reque
             )
         except Exception as exc:
             if decision.selected == "openai" and decision.fallback_allowed:
-                logger.warning("OpenAI operations chat failed; falling back local: %s", exc)
+                logger.warning(
+                    "OpenAI operations chat failed; falling back local: %s",
+                    exc,
+                )
                 provider = "local"
                 model = decision.local_model
                 yield _provider_event(provider, model, "openai")
@@ -346,8 +369,8 @@ async def camcore_operations_chat(
     """Serve policy-controlled administrator operations chat.
 
     Local mode delegates to the normal server route, retaining operational
-    memory behaviour.  OpenAI mode uses a request-local copy of the operations
-    agent and deliberately does not preload Jarvis memory.  Approved tool calls
+    memory behaviour. OpenAI mode uses a request-local copy of the operations
+    agent and deliberately does not preload Jarvis memory. Approved tool calls
     may still send the minimum required prompt/tool results to OpenAI.
     """
 
@@ -374,7 +397,10 @@ async def camcore_operations_chat(
 
     agent = getattr(request.app.state, "agent", None)
     if agent is None:
-        raise HTTPException(status_code=503, detail="CamCore operations agent unavailable")
+        raise HTTPException(
+            status_code=503,
+            detail="CamCore operations agent unavailable",
+        )
     try:
         return await asyncio.to_thread(
             _handle_agent,
