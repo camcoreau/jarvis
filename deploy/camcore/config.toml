@@ -59,7 +59,7 @@ servers = """
 [
   {
     "name": "camcore-outline",
-    "url": "https://docs.camcore.network/mcp",
+    "url": "http://outline:3000/mcp",
     "token_env": "CAMCORE_OUTLINE_API_KEY",
     "include_tools": ["list_documents", "fetch"]
   }
