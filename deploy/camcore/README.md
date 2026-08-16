@@ -16,6 +16,9 @@ Manager (NPM) instance.
 - `camcore-jarvis-ollama-models` persists downloaded model data.
 - Jarvis joins the Docker network shared with NPM. Ollama does not.
 - No service in this stack publishes a host port.
+- The CamCore production `config.toml` is baked into the immutable Jarvis image
+  at `/etc/openjarvis/camcore-config.toml`. The Portainer stack does not rely on
+  bind mounts from Portainer's temporary Git checkout.
 
 The deployment intentionally remains private. Do not create a public proxy host
 or public DNS record for Jarvis during the foundation phase.
@@ -65,6 +68,10 @@ CAMCORE_TZ=Australia/Melbourne
 
 `CAMCORE_JARVIS_RELEASE` must be an immutable image tag published by the
 CamCore image workflow. Do not use `latest`.
+
+The compose file intentionally contains no repository-file `configs:` mount.
+This avoids Portainer Git-stack deployments failing when their temporary checkout
+path is not available to the Docker daemon at container-create time.
 
 On the first deployment, model download can take some time. Jarvis intentionally
 waits for the model-init service to complete before starting.

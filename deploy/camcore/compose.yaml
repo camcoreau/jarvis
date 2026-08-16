@@ -70,7 +70,7 @@ services:
     environment:
       HOME: /data/home
       OPENJARVIS_HOME: /data
-      OPENJARVIS_CONFIG: /etc/openjarvis/config.toml
+      OPENJARVIS_CONFIG: /etc/openjarvis/camcore-config.toml
       OPENJARVIS_API_KEY: ${OPENJARVIS_API_KEY:?Set OPENJARVIS_API_KEY before deployment}
       OPENJARVIS_NO_UPDATE_CHECK: "1"
       OLLAMA_HOST: http://ollama:11434
@@ -87,9 +87,6 @@ services:
       - ${CAMCORE_JARVIS_MODEL:?Set CAMCORE_JARVIS_MODEL before deployment}
       - --agent
       - camcore_assistant
-    configs:
-      - source: jarvis-config
-        target: /etc/openjarvis/config.toml
     volumes:
       - jarvis-data:/data
     expose:
@@ -118,10 +115,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-
-configs:
-  jarvis-config:
-    file: ./config.toml
 
 volumes:
   jarvis-data:
