@@ -46,11 +46,21 @@ def _engine():
 
 
 class _FakeTool:
-    def __init__(self, name: str, *, content: str = "", success: bool = True) -> None:
+    def __init__(
+        self,
+        name: str,
+        *,
+        content: str = "",
+        success: bool = True,
+        mcp_client=None,
+    ) -> None:
         self.spec = ToolSpec(name=name, description="test", parameters={})
         self.content = content
         self.success = success
         self.calls: list[dict] = []
+        if mcp_client is not None:
+            self.tool_id = "mcp_adapter"
+            self._client = mcp_client
 
     def execute(self, **params):
         self.calls.append(params)
@@ -93,8 +103,17 @@ def _knowledge_agent():
         ]
     )
 
-    list_tool = _FakeTool("camcore-outline:list_documents", content=search_content)
-    fetch_tool = _FakeTool("camcore-outline:fetch", content=fetch_content)
+    outline_client = object()
+    list_tool = _FakeTool(
+        "camcore-outline:list_documents",
+        content=search_content,
+        mcp_client=outline_client,
+    )
+    fetch_tool = _FakeTool(
+        "camcore-outline:fetch",
+        content=fetch_content,
+        mcp_client=outline_client,
+    )
     destructive_tool = _FakeTool("delete_document", content="should never be called")
 
     agent = MagicMock()
@@ -189,8 +208,14 @@ def test_generic_member_chat_does_not_touch_outline():
 
 def test_outline_failure_degrades_to_normal_member_chat():
     engine = _engine()
-    failed_list = _FakeTool("list_documents", content="error", success=False)
-    fetch_tool = _FakeTool("fetch", content="unused")
+    outline_client = object()
+    failed_list = _FakeTool(
+        "list_documents",
+        content="error",
+        success=False,
+        mcp_client=outline_client,
+    )
+    fetch_tool = _FakeTool("fetch", content="unused", mcp_client=outline_client)
     agent = MagicMock()
     agent._model = "server-model"
     agent._tools = [failed_list, fetch_tool]
@@ -208,5 +233,31 @@ def test_outline_failure_degrades_to_normal_member_chat():
     assert response.status_code == 200
     args, _ = engine.generate.call_args
     assert "APPROVED CAMCORE MEMBER KNOWLEDGE" not in args[0][0].content
+    assert failed_list.calls == [{"query": "What is Earth in CamCore?", "limit": 5}]
     assert fetch_tool.calls == []
     agent.run.assert_not_called()
+
+
+def test_same_named_non_mcp_tools_are_not_trusted_for_member_knowledge():
+    engine = _engine()
+    list_tool = _FakeTool("list_documents", content="not trusted")
+    fetch_tool = _FakeTool("fetch", content="not trusted")
+    agent = MagicMock()
+    agent._model = "server-model"
+    agent._tools = [list_tool, fetch_tool]
+    app = create_app(engine, "server-model", agent=agent, config=_config())
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/camcore/portal/chat/completions",
+        json={
+            "model": "ignored-model",
+            "messages": [{"role": "user", "content": "What is Earth in CamCore?"}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert list_tool.calls == []
+    assert fetch_tool.calls == []
+    args, _ = engine.generate.call_args
+    assert "APPROVED CAMCORE MEMBER KNOWLEDGE" not in args[0][0].content
