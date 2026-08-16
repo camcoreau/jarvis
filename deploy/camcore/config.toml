@@ -1,0 +1,117 @@
+# Jarvis | CamCore AI — production server profile
+#
+# Secrets do not belong in this file. Runtime credentials are supplied through
+# the container environment or OpenJarvis' credential store under /data.
+
+[engine]
+default = "ollama"
+
+[engine.ollama]
+host = "http://ollama:11434"
+
+[intelligence]
+# The compose stack passes CAMCORE_JARVIS_MODEL with --model at startup.
+# Keep this conservative default aligned with the initial CamCore deployment.
+default_model = "qwen3.5:4b"
+provider = "local"
+temperature = 0.2
+max_tokens = 2048
+
+[agent]
+default_agent = "camcore_assistant"
+max_turns = 10
+context_from_memory = true
+default_system_prompt = """
+You are Jarvis, the private AI operations assistant for CamCore.
+Prefer local processing, verify current state before making operational claims,
+protect credentials and private infrastructure data, and favour reversible,
+documented changes. Distinguish public camcore.au services from private
+camcore.network services. Require clear user intent before destructive,
+security-sensitive, or externally visible actions.
+"""
+
+[tools]
+# Foundation deployment remains read-mostly. Add write/shell capabilities only
+# after approval and audit workflows are intentionally configured.
+enabled = ["web_search", "file_read", "think", "calculator"]
+
+[tools.storage]
+default_backend = "sqlite"
+db_path = "/data/memory.db"
+enabled = false
+facts_path = "/data/memory_facts.jsonl"
+
+[tools.mcp]
+enabled = true
+
+[telemetry]
+# Local inference telemetry can be enabled later once the first deployment is
+# stable. It is disabled initially to minimise background work on the host.
+enabled = false
+db_path = "/data/telemetry.db"
+
+[analytics]
+# Do not send external OpenJarvis usage analytics from CamCore.
+enabled = false
+
+[traces]
+enabled = true
+db_path = "/data/traces.db"
+
+[security]
+enabled = true
+profile = "server"
+mode = "block"
+secret_scanner = true
+pii_scanner = true
+enforce_tool_confirmation = true
+ssrf_protection = true
+rate_limit_enabled = true
+rate_limit_rpm = 30
+rate_limit_burst = 5
+audit_log_path = "/data/audit.db"
+vault_key_path = "/data/.vault_key"
+
+[server]
+host = "0.0.0.0"
+port = 8000
+agent = "camcore_assistant"
+workers = 1
+cors_origins = ["https://jarvis.camcore.network"]
+
+[channel]
+enabled = false
+
+[scheduler]
+enabled = false
+
+[workflow]
+enabled = false
+
+[proactive]
+enabled = false
+
+[agent_manager]
+enabled = true
+db_path = "/data/agents.db"
+
+[sessions]
+enabled = true
+db_path = "/data/sessions.db"
+
+[memory_files]
+soul_path = "/data/SOUL.md"
+memory_path = "/data/MEMORY.md"
+user_path = "/data/USER.md"
+
+[skills]
+enabled = true
+skills_dir = "/data/skills"
+auto_discover = true
+auto_sync = false
+auto_update = false
+index_dir = "/data/skill-index"
+
+[compression]
+enabled = true
+strategy = "session_consolidation"
