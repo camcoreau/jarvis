@@ -116,6 +116,46 @@ class TestStreamableHTTPTransport:
         headers = mock_client.post.call_args[1]["headers"]
         assert headers["Authorization"] == "Bearer ha-long-lived-token-xyz"
 
+    def test_static_routing_headers_are_sent(self, _mock_httpx_client):
+        """Static non-secret routing headers accompany every MCP request."""
+        from openjarvis.mcp.transport import StreamableHTTPTransport
+
+        mock_client = _mock_httpx_client
+        mock_client.post.return_value = _make_http_response({})
+
+        transport = StreamableHTTPTransport(
+            "http://outline:3000/mcp",
+            token="outline-secret",
+            headers={
+                "Host": "docs.camcore.network",
+                "X-Forwarded-Host": "docs.camcore.network",
+                "X-Forwarded-Proto": "https",
+            },
+        )
+        transport.send(MCPRequest(method="initialize", id=1))
+
+        headers = mock_client.post.call_args[1]["headers"]
+        assert headers["Host"] == "docs.camcore.network"
+        assert headers["X-Forwarded-Host"] == "docs.camcore.network"
+        assert headers["X-Forwarded-Proto"] == "https"
+        assert headers["Authorization"] == "Bearer outline-secret"
+
+    @pytest.mark.parametrize(
+        "reserved_header",
+        ["Authorization", "Content-Type", "Accept", "Mcp-Session-Id"],
+    )
+    def test_reserved_static_headers_are_rejected(
+        self, _mock_httpx_client, reserved_header
+    ):
+        """Static config cannot override auth or MCP protocol headers."""
+        from openjarvis.mcp.transport import StreamableHTTPTransport
+
+        with pytest.raises(ValueError, match="reserved"):
+            StreamableHTTPTransport(
+                "http://localhost:9583/mcp",
+                headers={reserved_header: "unsafe"},
+            )
+
     def test_no_authorization_header_without_token(self, _mock_httpx_client):
         """Backward compat — no token kwarg → no Authorization header."""
         from openjarvis.mcp.transport import StreamableHTTPTransport

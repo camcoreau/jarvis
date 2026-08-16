@@ -118,11 +118,19 @@ class StreamableHTTPTransport(MCPTransport):
     required by the MCP Streamable HTTP specification.
     """
 
+    _RESERVED_EXTRA_HEADERS = {
+        "accept",
+        "authorization",
+        "content-type",
+        "mcp-session-id",
+    }
+
     def __init__(
         self,
         url: str,
         *,
         token: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
         connect_timeout: float = 10.0,
         request_timeout: float = 60.0,
     ) -> None:
@@ -130,6 +138,16 @@ class StreamableHTTPTransport(MCPTransport):
 
         self._url = url
         self._token = token
+        self._extra_headers: dict[str, str] = {}
+        for key, value in (headers or {}).items():
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError("Custom MCP header names must be non-empty strings")
+            if not isinstance(value, str):
+                raise ValueError("Custom MCP header values must be strings")
+            if key.lower() in self._RESERVED_EXTRA_HEADERS:
+                raise ValueError(f"Custom MCP header {key!r} is reserved")
+            self._extra_headers[key] = value
+
         self._session_id: Optional[str] = None
         self._client = httpx.Client(
             timeout=httpx.Timeout(
@@ -156,10 +174,15 @@ class StreamableHTTPTransport(MCPTransport):
         string) deliberately do NOT send the header, matching the
         upstream MCP spec and the cfg.get("token") plumbing in the
         builder.
+
+        Non-secret static routing headers may also be supplied by the caller.
+        Protocol and authentication headers are reserved and cannot be
+        overridden through that mechanism.
         """
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
+            **self._extra_headers,
         }
         if self._token:
             headers["Authorization"] = f"Bearer {self._token}"

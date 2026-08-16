@@ -223,6 +223,56 @@ class TestLoaderTokenPlumbing:
         )
 
 
+class TestLoaderHeaderPlumbing:
+    def test_headers_passed_to_streamable_http(self, _mock_mcp_stack):
+        """Static routing headers are passed through without becoming secrets."""
+        from openjarvis.mcp.loader import load_mcp_tools_from_config
+
+        routing_headers = {
+            "Host": "docs.camcore.network",
+            "X-Forwarded-Proto": "https",
+        }
+        cfg = _make_mcp_cfg(
+            enabled=True,
+            servers=[
+                {
+                    "name": "outline",
+                    "url": "http://outline:3000/mcp",
+                    "headers": routing_headers,
+                }
+            ],
+        )
+        load_mcp_tools_from_config(cfg)
+
+        _mock_mcp_stack["http"].assert_called_once_with(
+            url="http://outline:3000/mcp",
+            token=None,
+            headers=routing_headers,
+        )
+
+    def test_non_object_headers_skip_server(self, _mock_mcp_stack, caplog):
+        """Malformed static header configuration fails closed per server."""
+        from openjarvis.mcp.loader import load_mcp_tools_from_config
+
+        cfg = _make_mcp_cfg(
+            enabled=True,
+            servers=[
+                {
+                    "name": "outline",
+                    "url": "http://outline:3000/mcp",
+                    "headers": ["Host: docs.camcore.network"],
+                }
+            ],
+        )
+        with caplog.at_level("WARNING"):
+            tools, clients = load_mcp_tools_from_config(cfg)
+
+        assert tools == []
+        assert clients == []
+        _mock_mcp_stack["http"].assert_not_called()
+        assert any("non-object headers" in r.message for r in caplog.records)
+
+
 class TestLoaderFiltering:
     def test_allowed_names_filter_applied(self, _mock_mcp_stack):
         """allowed_names limits the returned tools to that set."""

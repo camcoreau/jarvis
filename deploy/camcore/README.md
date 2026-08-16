@@ -20,8 +20,8 @@ Manager (NPM) instance.
   at `/etc/openjarvis/camcore-config.toml`. The Portainer stack does not rely on
   bind mounts from Portainer's temporary Git checkout.
 - CamCore documentation is available to Jarvis through Outline's Streamable HTTP
-  MCP endpoint at `https://docs.camcore.network/mcp`. The CamCore profile exposes
-  only the read-only `list_documents` and `fetch` tools.
+  MCP endpoint over the shared `npm-backend` Docker network. The CamCore profile
+  exposes only the read-only `list_documents` and `fetch` tools.
 
 The deployment intentionally remains private. Do not create a public proxy host
 or public DNS record for Jarvis during the foundation phase.
@@ -139,15 +139,35 @@ be written into this repository or into a public-facing client bundle.
 
 ## 5. Outline knowledge access
 
-Jarvis connects directly to the existing private Outline endpoint configured as:
+Jarvis and Outline are both attached to `npm-backend`, so Jarvis connects to the
+Outline container directly instead of resolving `docs.camcore.network` to NPM's
+LAN/macvlan address:
 
 ```text
-https://docs.camcore.network/mcp
+http://outline:3000/mcp
 ```
 
-Outline's MCP route accepts bearer authentication and filters available tools by
-the scopes attached to the authenticated token. The CamCore profile additionally
-filters discovery to:
+Outline still needs the request context associated with its canonical internal
+hostname. The MCP transport therefore sends these static, non-secret routing
+headers:
+
+```text
+Host: docs.camcore.network
+X-Forwarded-Host: docs.camcore.network
+X-Forwarded-Proto: https
+```
+
+This route was verified live from `camcore-jarvis` against Outline 1.9.2: the
+MCP `initialize` request returned HTTP 200 with `text/event-stream` and reported
+server name `outline`, version `1.9.2`.
+
+The bearer credential remains separate in `CAMCORE_OUTLINE_API_KEY`; the static
+header feature rejects `Authorization`, `Content-Type`, `Accept`, and
+`Mcp-Session-Id` overrides so secrets and protocol state cannot be moved into
+repository configuration.
+
+Outline's MCP route filters available tools by the scopes attached to the
+authenticated token. The CamCore profile additionally filters discovery to:
 
 - `list_documents` — full-text search/listing of accessible documents.
 - `fetch` — retrieve the selected document's full content.
@@ -257,6 +277,7 @@ The production profile is deliberately conservative:
 - external analytics disabled;
 - public savings/leaderboard sharing disabled in the CamCore frontend;
 - Outline MCP credentials supplied only at runtime;
+- Outline MCP traffic kept on the shared internal Docker bridge;
 - Outline MCP discovery restricted to `list_documents` and `fetch`;
 - write/shell tools disabled;
 - security profile set to `server` / `block`;

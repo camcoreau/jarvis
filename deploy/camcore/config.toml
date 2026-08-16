@@ -59,8 +59,13 @@ servers = """
 [
   {
     "name": "camcore-outline",
-    "url": "https://docs.camcore.network/mcp",
+    "url": "http://outline:3000/mcp",
     "token_env": "CAMCORE_OUTLINE_API_KEY",
+    "headers": {
+      "Host": "docs.camcore.network",
+      "X-Forwarded-Host": "docs.camcore.network",
+      "X-Forwarded-Proto": "https"
+    },
     "include_tools": ["list_documents", "fetch"]
   }
 ]
