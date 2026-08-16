@@ -157,7 +157,11 @@ def _document_ids(raw: str) -> list[str]:
             document = value.get("document")
             if isinstance(document, dict):
                 document_id = document.get("id")
-                if isinstance(document_id, str) and document_id and document_id not in ids:
+                if (
+                    isinstance(document_id, str)
+                    and document_id
+                    and document_id not in ids
+                ):
                     ids.append(document_id)
             for child in value.values():
                 walk(child)
