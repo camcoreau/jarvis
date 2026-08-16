@@ -86,13 +86,25 @@ def _normalised_tool_name(tool: Any) -> str:
 
 
 def _outline_tools(agent: Any) -> dict[str, Any]:
-    """Return only the two read-only Outline tools from the configured agent."""
+    """Return the two read-only MCP tools only when they share one client."""
 
     selected: dict[str, Any] = {}
     for tool in getattr(agent, "_tools", None) or []:
+        if getattr(tool, "tool_id", None) != "mcp_adapter":
+            continue
         name = _normalised_tool_name(tool)
         if name in _ALLOWED_TOOL_NAMES and name not in selected:
             selected[name] = tool
+
+    if set(selected) != _ALLOWED_TOOL_NAMES:
+        return {}
+
+    clients = {id(getattr(tool, "_client", None)) for tool in selected.values()}
+    if None in (getattr(tool, "_client", None) for tool in selected.values()):
+        return {}
+    if len(clients) != 1:
+        logger.warning("CamCore member knowledge tools do not share one MCP client")
+        return {}
     return selected
 
 
