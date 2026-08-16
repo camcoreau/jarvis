@@ -99,7 +99,7 @@ def load_mcp_tools_from_config(
             args = cfg.get("args", [])
 
             if url:
-                if token is None and token_env:
+                if token is None and token_env is not None:
                     if not isinstance(token_env, str) or not token_env.strip():
                         logger.warning(
                             "MCP server '%s' has an invalid token_env value — skipping",
