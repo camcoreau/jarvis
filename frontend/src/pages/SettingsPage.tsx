@@ -330,7 +330,7 @@ export function SettingsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `openjarvis-export-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `camcore-jarvis-export-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -394,9 +394,8 @@ export function SettingsPage() {
         </header>
 
         <div className="flex flex-col gap-4">
-          {/* Appearance */}
           <Section title="Appearance">
-            <SettingRow label="Theme" description="Choose how OpenJarvis looks">
+            <SettingRow label="Theme" description="Choose how Jarvis | CamCore AI looks">
               <div className="flex gap-1 p-0.5 rounded-lg" style={{ background: 'var(--color-bg-secondary)' }}>
                 {themeOptions.map((opt) => {
                   const isActive = settings.theme === opt.value;
@@ -436,7 +435,6 @@ export function SettingsPage() {
             </SettingRow>
           </Section>
 
-          {/* Connection */}
           <Section title="Connection">
             <SettingRow label="Server status" description={serverInfo ? `${serverInfo.engine} / ${serverInfo.model}` : 'Not connected'}>
               <div className="flex items-center gap-2">
@@ -480,7 +478,6 @@ export function SettingsPage() {
             </SettingRow>
           </Section>
 
-          {/* Inference source */}
           <Section title="Inference source">
             <SettingRow label="Source" description="Where the app runs models. Applies after restart.">
               <select
@@ -532,7 +529,6 @@ export function SettingsPage() {
             </SettingRow>
           </Section>
 
-          {/* Models */}
           <Section title="Models">
             <SettingRow label="Local models (Ollama)" description="Models available for local inference">
               <OllamaModelList />
@@ -550,7 +546,6 @@ export function SettingsPage() {
             </SettingRow>
           </Section>
 
-          {/* API Keys */}
           <Section title="API Keys">
             <SettingRow label="OpenAI" description="GPT-4, GPT-3.5, etc.">
               <ApiKeyInput keyName="OPENAI_API_KEY" placeholder="sk-..." />
@@ -566,14 +561,12 @@ export function SettingsPage() {
             </SettingRow>
           </Section>
 
-          {/* Tools */}
           <Section title="Tools">
             <SettingRow label="Web Search" description="Tavily key for web search tool">
               <ApiKeyInput keyName="TAVILY_API_KEY" placeholder="tvly-..." toolName="web_search" />
             </SettingRow>
           </Section>
 
-          {/* Memory */}
           <Section title="Memory">
             <SettingRow label="Memory status" description={memoryStats ? `${memoryStats.backend} backend — ${memoryStats.entries} entries` : 'Unable to reach memory service'}>
               <div className="flex items-center gap-2">
@@ -677,7 +670,6 @@ export function SettingsPage() {
             </SettingRow>
           </Section>
 
-          {/* Model defaults */}
           <Section title="Model Defaults">
             <SettingRow label="Temperature" description={`${settings.temperature}`}>
               <input
@@ -703,7 +695,6 @@ export function SettingsPage() {
             </SettingRow>
           </Section>
 
-          {/* Speech */}
           <Section title="Speech">
             <SettingRow label="Speech-to-Text" description="Enable microphone input for voice dictation">
               <button
@@ -742,12 +733,11 @@ export function SettingsPage() {
             {!speechBackendAvailable && speechBackendAvailable !== null && (
               <div className="text-xs mt-2 px-1" style={{ color: 'var(--color-text-tertiary)' }}>
                 Set up a speech backend to use voice input.
-                See the <a href="https://open-jarvis.github.io/OpenJarvis/user-guide/tools/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)' }}>documentation</a> for details.
+                See the <a href="https://open-jarvis.github.io/OpenJarvis/user-guide/tools/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)' }}>upstream documentation</a> for implementation details.
               </div>
             )}
           </Section>
 
-          {/* Data */}
           <Section title="Data">
             <SettingRow label="Conversations" description={`${conversations.length} stored locally`}>
               <div className="flex gap-2">
@@ -788,7 +778,6 @@ export function SettingsPage() {
             </SettingRow>
           </Section>
 
-          {/* Updates */}
           <Section title="Updates">
             <SettingRow label="Auto-update" description="Check for new desktop builds automatically every 30 minutes">
               <button
@@ -821,23 +810,22 @@ export function SettingsPage() {
             </SettingRow>
           </Section>
 
-          {/* About */}
           <Section title="About">
             <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
               <p className="mb-2">
-                <span className="font-semibold" style={{ color: 'var(--color-text)' }}>OpenJarvis</span> — Programming abstractions for on-device AI.
+                <span className="font-semibold" style={{ color: 'var(--color-text)' }}>Jarvis | CamCore AI</span> — private local-first operations intelligence for CamCore.
               </p>
               <p className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
-                Part of Intelligence Per Watt, a research initiative at Stanford SAIL.
+                CamCore product experience built on the OpenJarvis project. Compatibility identifiers remain upstream-aligned where required for safe updates and fork maintenance.
               </p>
               <div className="flex gap-3 mt-3 text-xs">
                 <a
-                  href="https://openjarvis.stanford.edu/"
+                  href="https://github.com/camcoreau/jarvis"
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: 'var(--color-accent)' }}
                 >
-                  Project site
+                  CamCore source
                 </a>
                 <a
                   href="https://open-jarvis.github.io/OpenJarvis/"
@@ -845,7 +833,7 @@ export function SettingsPage() {
                   rel="noopener noreferrer"
                   style={{ color: 'var(--color-accent)' }}
                 >
-                  Documentation
+                  Upstream documentation
                 </a>
               </div>
             </div>
