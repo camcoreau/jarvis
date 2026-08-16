@@ -23,52 +23,65 @@ export function Layout() {
   }, []);
 
   const navigate = useNavigate();
+  const backendLabel = apiReachable === false ? 'Backend unavailable' : apiReachable === null ? 'Checking backend' : 'Systems connected';
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden relative" style={{ paddingTop: '3px' }}>
+    <div className="camcore-shell flex h-full w-full overflow-hidden relative">
       <div className="hud-backdrop" aria-hidden="true" />
       <SystemPulse apiReachable={apiReachable} />
       <ApprovalBell />
 
-      {/* Health check banner */}
-      {apiReachable === false && (
+      <Sidebar />
+      {sidebarOpen && (
         <div
-          className="flex items-center gap-3 px-4 py-2 text-sm shrink-0"
-          style={{
-            background: 'color-mix(in srgb, var(--color-error) 8%, transparent)',
-            borderBottom: '1px solid color-mix(in srgb, var(--color-error) 15%, transparent)',
-            color: 'var(--color-text)',
-          }}
-        >
-          <span
-            className="w-1.5 h-1.5 rounded-full shrink-0"
-            style={{ background: 'var(--color-error)' }}
-          />
-          <span>Cannot reach OpenJarvis backend</span>
-          <button
-            onClick={() => navigate('/settings')}
-            className="text-sm underline cursor-pointer ml-auto shrink-0"
-            style={{ color: 'var(--color-accent)' }}
-          >
-            Change URL
-          </button>
-        </div>
+          className="fixed inset-0 z-20 bg-black/45 md:hidden"
+          onClick={() => useAppStore.getState().setSidebarOpen(false)}
+        />
       )}
 
-      <div className="flex flex-1 min-h-0 relative z-10">
-        <Sidebar />
-        {sidebarOpen && (
+      <main className="camcore-workspace flex-1 flex flex-col min-w-0 h-full relative z-10">
+        <div className="camcore-status-strip shrink-0" aria-label="Jarvis system status">
+          <span className="camcore-status-product">Jarvis</span>
+          <span className="camcore-status-divider" aria-hidden="true" />
+          <span className="camcore-status-context">CamCore AI</span>
+          <span className="camcore-status-divider" aria-hidden="true" />
+          <span className="camcore-status-context">Cameron Family Secure Network</span>
+          <span className="camcore-status-spacer" />
+          <span className="camcore-status-context">Local-first</span>
+          <span className="camcore-status-pill">
+            <span className="camcore-status-dot" aria-hidden="true" />
+            {backendLabel}
+          </span>
+        </div>
+
+        {apiReachable === false && (
           <div
-            className="fixed inset-0 z-20 bg-black/40 md:hidden"
-            onClick={() => useAppStore.getState().setSidebarOpen(false)}
-          />
-        )}
-        <main className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden" style={{ background: 'transparent' }}>
-          <div className="flex-1 flex flex-col min-w-0 min-h-0 relative z-[2]">
-            <Outlet />
+            className="flex items-center gap-3 px-4 py-2 text-sm shrink-0"
+            style={{
+              background: 'color-mix(in srgb, var(--color-error) 8%, transparent)',
+              borderBottom: '1px solid color-mix(in srgb, var(--color-error) 15%, transparent)',
+              color: 'var(--color-text)',
+            }}
+          >
+            <span
+              className="w-1.5 h-1.5 rounded-full shrink-0"
+              style={{ background: 'var(--color-error)' }}
+            />
+            <span>Jarvis cannot reach its local backend.</span>
+            <button
+              onClick={() => navigate('/settings')}
+              className="text-sm underline cursor-pointer ml-auto shrink-0"
+              style={{ color: 'var(--color-accent)' }}
+            >
+              Check connection
+            </button>
           </div>
-        </main>
-      </div>
+        )}
+
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 relative z-[2]">
+          <Outlet />
+        </div>
+      </main>
     </div>
   );
 }

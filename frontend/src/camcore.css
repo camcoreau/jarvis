@@ -1,0 +1,476 @@
+/* Jarvis | CamCore AI visual system
+ * Loaded after the upstream OpenJarvis stylesheet so the fork can keep
+ * upstream components intact while presenting a first-party CamCore shell.
+ */
+
+:root {
+  --color-bg: #061018;
+  --color-bg-secondary: #091722;
+  --color-bg-tertiary: #102331;
+  --color-surface: #0a1924;
+  --color-sidebar: rgba(6, 16, 24, 0.9);
+  --color-border: rgba(116, 205, 236, 0.13);
+  --color-border-subtle: rgba(116, 205, 236, 0.065);
+  --color-text: #f3f8fb;
+  --color-text-secondary: #98adba;
+  --color-text-tertiary: #647b89;
+  --color-text-inverse: #041019;
+  --color-accent: #4fcff3;
+  --color-accent-hover: #8ce3f8;
+  --color-accent-subtle: rgba(79, 207, 243, 0.1);
+  --color-accent-glow: rgba(79, 207, 243, 0.28);
+  --color-accent-purple: #6ea8ff;
+  --color-accent-purple-hover: #9bc4ff;
+  --color-accent-purple-subtle: rgba(110, 168, 255, 0.11);
+  --color-accent-blue-subtle: rgba(79, 207, 243, 0.1);
+  --color-success: #55d99a;
+  --color-warning: #f0b55d;
+  --color-error: #ff7f87;
+  --color-code-bg: #06131c;
+  --color-input-bg: rgba(7, 20, 29, 0.92);
+  --color-input-border: rgba(116, 205, 236, 0.16);
+  --color-user-bubble: linear-gradient(135deg, rgba(65, 158, 234, 0.22), rgba(79, 207, 243, 0.12));
+  --color-user-bubble-text: #f2fbff;
+  --color-on-accent: #041019;
+  --color-disabled-bg: #10202a;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.28);
+  --shadow-md: 0 14px 34px -20px rgb(0 0 0 / 0.8), 0 0 0 1px rgba(79, 207, 243, 0.035);
+  --shadow-lg: 0 24px 70px -28px rgb(0 0 0 / 0.9), 0 0 0 1px rgba(79, 207, 243, 0.055);
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --sidebar-width: 272px;
+  color-scheme: dark;
+}
+
+.light {
+  --color-bg: #eef5f8;
+  --color-bg-secondary: #f7fbfc;
+  --color-bg-tertiary: #e5f0f4;
+  --color-surface: #ffffff;
+  --color-sidebar: rgba(247, 251, 252, 0.92);
+  --color-border: rgba(8, 76, 103, 0.12);
+  --color-border-subtle: rgba(8, 76, 103, 0.06);
+  --color-text: #071923;
+  --color-text-secondary: #516a78;
+  --color-text-tertiary: #8296a1;
+  --color-text-inverse: #f6fbfd;
+  --color-accent: #078eb4;
+  --color-accent-hover: #046e8e;
+  --color-accent-subtle: rgba(7, 142, 180, 0.09);
+  --color-accent-glow: rgba(7, 142, 180, 0.2);
+  --color-accent-purple: #3278d1;
+  --color-accent-purple-hover: #235da5;
+  --color-accent-purple-subtle: rgba(50, 120, 209, 0.1);
+  --color-input-bg: rgba(255, 255, 255, 0.94);
+  --color-input-border: rgba(8, 76, 103, 0.14);
+  --color-code-bg: #edf5f7;
+  --color-user-bubble: linear-gradient(135deg, #087fa2, #0b9fc2);
+  --color-user-bubble-text: #ffffff;
+  --color-on-accent: #ffffff;
+  --color-disabled-bg: #e3edf0;
+  color-scheme: light;
+}
+
+body {
+  background:
+    radial-gradient(circle at 16% -12%, rgba(79, 207, 243, 0.12), transparent 33%),
+    radial-gradient(circle at 91% 112%, rgba(65, 158, 234, 0.11), transparent 35%),
+    var(--color-bg);
+}
+
+.camcore-shell {
+  padding: 10px;
+  gap: 10px;
+  background: transparent;
+}
+
+.camcore-shell .hud-backdrop {
+  background-image:
+    radial-gradient(circle at 12% -4%, rgba(79, 207, 243, 0.08), transparent 34%),
+    radial-gradient(circle at 92% 108%, rgba(65, 158, 234, 0.07), transparent 38%);
+}
+
+.camcore-shell .hud-backdrop::before {
+  background-size: 64px 64px;
+  opacity: 0.28;
+  animation: none;
+}
+
+.camcore-shell .hud-backdrop::after {
+  opacity: 0.2;
+}
+
+.camcore-sidebar {
+  border: 1px solid var(--color-border) !important;
+  border-radius: 22px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(10, 28, 39, 0.96), rgba(5, 16, 24, 0.96)) !important;
+  backdrop-filter: blur(18px) saturate(125%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(125%) !important;
+}
+
+.light .camcore-sidebar {
+  background: rgba(248, 252, 253, 0.94) !important;
+}
+
+.camcore-brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.camcore-brand-mark {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid rgba(79, 207, 243, 0.28);
+  background: linear-gradient(145deg, rgba(79, 207, 243, 0.17), rgba(65, 158, 234, 0.07));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 12px 30px -20px var(--color-accent);
+  color: var(--color-accent);
+}
+
+.camcore-brand-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.camcore-brand-title {
+  font-size: 0.95rem;
+  font-weight: 760;
+  letter-spacing: -0.025em;
+  color: var(--color-text);
+}
+
+.camcore-brand-subtitle {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.camcore-gradient-text {
+  color: transparent;
+  background: linear-gradient(110deg, #bcecf4 4%, #4fcff3 52%, #419eea);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.camcore-section-label {
+  margin: 12px 12px 6px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.camcore-model-card {
+  border-radius: 14px !important;
+  background: rgba(79, 207, 243, 0.055) !important;
+  border-color: rgba(79, 207, 243, 0.13) !important;
+}
+
+.camcore-nav-item {
+  min-height: 38px;
+  border: 1px solid transparent;
+}
+
+.camcore-nav-item:hover {
+  border-color: var(--color-border-subtle);
+}
+
+.camcore-nav-item[data-active='true'] {
+  border-color: rgba(79, 207, 243, 0.13);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.025);
+}
+
+.camcore-workspace {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(7, 20, 29, 0.76), rgba(5, 15, 22, 0.9));
+  box-shadow: var(--shadow-lg);
+}
+
+.light .camcore-workspace {
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.camcore-status-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: rgba(7, 20, 29, 0.62);
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+}
+
+.light .camcore-status-strip {
+  background: rgba(247, 251, 252, 0.7);
+}
+
+.camcore-status-product {
+  font-weight: 760;
+  color: var(--color-text);
+}
+
+.camcore-status-divider {
+  width: 1px;
+  height: 14px;
+  background: var(--color-border);
+}
+
+.camcore-status-spacer {
+  flex: 1;
+}
+
+.camcore-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 24px;
+  padding: 3px 9px;
+  border: 1px solid rgba(85, 217, 154, 0.18);
+  border-radius: 999px;
+  background: rgba(85, 217, 154, 0.07);
+  color: #8ceab8;
+  font-size: 0.66rem;
+  font-weight: 720;
+}
+
+.light .camcore-status-pill {
+  color: #167848;
+}
+
+.camcore-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.camcore-hero {
+  width: min(100%, 760px);
+  margin: auto;
+  padding: 38px 34px 30px;
+  border: 1px solid var(--color-border);
+  border-radius: 26px;
+  background:
+    linear-gradient(145deg, rgba(11, 32, 44, 0.84), rgba(5, 17, 25, 0.72));
+  box-shadow: 0 30px 80px -46px rgb(0 0 0 / 0.95), inset 0 1px 0 rgba(255,255,255,0.035);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.light .camcore-hero {
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.camcore-hero-mark {
+  width: 50px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 22px;
+  border-radius: 16px;
+  border: 1px solid rgba(79, 207, 243, 0.22);
+  background: linear-gradient(145deg, rgba(79, 207, 243, 0.16), rgba(65, 158, 234, 0.06));
+  color: var(--color-accent);
+}
+
+.camcore-hero-eyebrow {
+  margin-bottom: 8px;
+  font-size: 0.66rem;
+  font-weight: 820;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.camcore-hero h2 {
+  margin: 0;
+  font-size: clamp(1.9rem, 4vw, 2.7rem);
+  font-weight: 760;
+  line-height: 1.06;
+  letter-spacing: -0.055em;
+}
+
+.camcore-hero-description {
+  max-width: 620px;
+  margin-top: 13px;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.68;
+}
+
+.camcore-capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.camcore-capability {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: rgba(79, 207, 243, 0.04);
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+  font-weight: 650;
+}
+
+.camcore-quick-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.camcore-quick-action {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 54px;
+  padding: 11px 13px;
+  border: 1px solid var(--color-border);
+  border-radius: 15px;
+  background: rgba(255,255,255,0.018);
+  color: var(--color-text-secondary);
+  text-align: left;
+  transition: 160ms ease;
+}
+
+.camcore-quick-action:hover {
+  transform: translateY(-1px);
+  border-color: rgba(79, 207, 243, 0.27);
+  background: rgba(79, 207, 243, 0.07);
+  color: var(--color-text);
+}
+
+.camcore-quick-action-icon {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+}
+
+.camcore-quick-action strong {
+  display: block;
+  color: var(--color-text);
+  font-size: 0.76rem;
+}
+
+.camcore-quick-action span {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+
+.camcore-source-banner {
+  border-color: rgba(79, 207, 243, 0.12) !important;
+  background: rgba(79, 207, 243, 0.05) !important;
+}
+
+.camcore-setup-shell {
+  background:
+    radial-gradient(circle at 50% 12%, rgba(79, 207, 243, 0.11), transparent 34%),
+    var(--color-bg) !important;
+}
+
+.camcore-setup-card {
+  padding: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: 26px;
+  background: rgba(7, 20, 29, 0.78);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.light .camcore-setup-card {
+  background: rgba(255,255,255,0.88);
+}
+
+.camcore-setup-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 8px;
+  color: var(--color-text);
+  font-size: 1.55rem;
+  font-weight: 780;
+  letter-spacing: -0.045em;
+}
+
+@media (max-width: 767px) {
+  .camcore-shell {
+    padding: 0;
+    gap: 0;
+  }
+
+  .camcore-sidebar,
+  .camcore-workspace {
+    border-radius: 0;
+    border-top: 0 !important;
+    border-bottom: 0 !important;
+  }
+
+  .camcore-sidebar {
+    border-left: 0 !important;
+  }
+
+  .camcore-workspace {
+    border-right: 0;
+  }
+
+  .camcore-status-strip {
+    padding-left: 46px;
+  }
+
+  .camcore-status-context,
+  .camcore-status-divider {
+    display: none;
+  }
+
+  .camcore-hero {
+    width: calc(100% - 24px);
+    padding: 28px 22px 22px;
+    border-radius: 20px;
+  }
+
+  .camcore-quick-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .camcore-quick-action:hover {
+    transform: none;
+  }
+}

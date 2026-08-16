@@ -9,17 +9,18 @@ export function DashboardPage() {
   return (
     <div className="flex-1 overflow-y-auto px-6 py-10">
       <div className="max-w-5xl mx-auto">
-        <header className="mb-6">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>
-              System Overview
+        <header className="mb-7">
+          <p className="camcore-hero-eyebrow">Jarvis operations</p>
+          <div className="flex items-end justify-between gap-4">
+            <h1 className="text-2xl font-semibold tracking-tight" style={{ color: 'var(--color-text)' }}>
+              Operations <span className="camcore-gradient-text">Overview</span>
             </h1>
             <div className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
               {stamp}
             </div>
           </div>
-          <p className="text-sm mt-2 max-w-2xl" style={{ color: 'var(--color-text-secondary)' }}>
-            Live telemetry for the on-device inference engine — power draw, token throughput, and cost savings versus cloud APIs.
+          <p className="text-sm mt-3 max-w-2xl leading-6" style={{ color: 'var(--color-text-secondary)' }}>
+            Local Jarvis runtime telemetry — inference activity, power draw, token throughput and the cost avoided by keeping suitable workloads on-device.
           </p>
         </header>
 

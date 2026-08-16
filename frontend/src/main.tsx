@@ -6,6 +6,7 @@ import App from './App';
 import { initApiBase } from './lib/api';
 import { initAnalytics } from './lib/analytics';
 import './index.css';
+import './camcore.css';
 
 function applyTheme() {
   try {
