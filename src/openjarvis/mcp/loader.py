@@ -109,8 +109,8 @@ def load_mcp_tools_from_config(
                     token = os.environ.get(token_env)
                     if not token:
                         logger.warning(
-                            "MCP server '%s' token environment variable '%s' is not set "
-                            "— skipping",
+                            "MCP server '%s' token environment variable '%s' "
+                            "is not set — skipping",
                             name,
                             token_env,
                         )
