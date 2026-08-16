@@ -1,0 +1,42 @@
+# Jarvis | CamCore AI — safe local-first default profile
+#
+# Copy this file to ~/.openjarvis/config.toml on the Jarvis host when ready.
+# Keep credentials and service tokens out of this file and out of Git.
+
+[engine]
+default = "ollama"
+
+[intelligence]
+default_model = "qwen3.5:9b"
+provider = "local"
+temperature = 0.2
+max_tokens = 2048
+
+[agent]
+default_agent = "camcore_assistant"
+max_turns = 10
+context_from_memory = true
+
+# Foundation profile is intentionally read-mostly. Write-capable and shell tools
+# should only be enabled when their approval and audit behaviour is configured.
+[tools]
+enabled = ["web_search", "file_read", "think", "calculator"]
+
+[tools.storage]
+default_backend = "sqlite"
+db_path = "~/.openjarvis/camcore-memory.db"
+
+[tools.mcp]
+enabled = true
+
+[telemetry]
+enabled = false
+
+[traces]
+enabled = true
+db_path = "~/.openjarvis/camcore-traces.db"
+
+[server]
+host = "127.0.0.1"
+port = 8000
+agent = "camcore_assistant"
