@@ -62,6 +62,10 @@ jobs:
           fi
           grep -F 'external: true' deploy/camcore/compose.yaml >/dev/null
           grep -F 'read_only: true' deploy/camcore/compose.yaml >/dev/null
+          if grep -Eq '^[[:space:]]+configs:' deploy/camcore/compose.yaml; then
+            echo 'CamCore Portainer stack must not depend on repository-file config mounts.' >&2
+            exit 1
+          fi
 
       - name: Verify required secrets fail closed
         shell: bash
@@ -107,14 +111,13 @@ jobs:
       - name: Smoke-test Jarvis CLI
         run: docker run --rm camcore-jarvis:test --version
 
-      - name: Validate CamCore config in production image
+      - name: Validate baked CamCore config in production image
         shell: bash
         run: |
           docker run --rm \
             --entrypoint python \
             -e OPENJARVIS_HOME=/tmp/openjarvis \
-            -e OPENJARVIS_CONFIG=/etc/openjarvis/config.toml \
-            -v "$PWD/deploy/camcore/config.toml:/etc/openjarvis/config.toml:ro" \
+            -e OPENJARVIS_CONFIG=/etc/openjarvis/camcore-config.toml \
             camcore-jarvis:test \
             -c 'from openjarvis.core.config import load_config; c=load_config(); assert c.server.agent == "camcore_assistant"; assert c.security.profile == "server"; assert c.analytics.enabled is False; assert c.telemetry.enabled is False; print("CamCore config ok")'
 
