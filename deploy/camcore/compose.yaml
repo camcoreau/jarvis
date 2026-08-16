@@ -19,9 +19,13 @@ services:
     entrypoint:
       - /bin/sh
       - -c
-      - install -d -o 10001 -g 10001 -m 0700 /data
+      - >-
+        chown 10001:10001 /data &&
+        chmod 0700 /data &&
+        install -d -o 10001 -g 10001 -m 0700 /data/home
     volumes:
       - jarvis-data:/data
+    network_mode: none
     restart: "no"
 
   ollama:
@@ -64,6 +68,7 @@ services:
     image: ghcr.io/camcoreau/jarvis:${CAMCORE_JARVIS_RELEASE:?Set CAMCORE_JARVIS_RELEASE to a published commit SHA}
     container_name: camcore-jarvis
     environment:
+      HOME: /data/home
       OPENJARVIS_HOME: /data
       OPENJARVIS_CONFIG: /etc/openjarvis/config.toml
       OPENJARVIS_API_KEY: ${OPENJARVIS_API_KEY:?Set OPENJARVIS_API_KEY before deployment}
@@ -97,6 +102,8 @@ services:
         condition: service_completed_successfully
       ollama-model:
         condition: service_completed_successfully
+    cap_drop:
+      - ALL
     read_only: true
     tmpfs:
       - /tmp:size=256m,mode=1777
