@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OpenJarvis",
+  "productName": "Jarvis | CamCore AI",
   "version": "1.0.1",
   "identifier": "com.openjarvis.desktop",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "OpenJarvis",
+        "title": "Jarvis | CamCore AI",
         "width": 1280,
         "height": 800,
         "minWidth": 900,
@@ -40,8 +40,8 @@
       "icons/icon.png"
     ],
     "category": "Utility",
-    "shortDescription": "On-device AI assistant with energy monitoring and trace debugging",
-    "longDescription": "OpenJarvis Desktop wraps the OpenJarvis research framework in a native desktop application with real-time energy monitoring, trace debugging, learning curve visualization, and memory browsing.",
+    "shortDescription": "Private local-first AI operations assistant for CamCore",
+    "longDescription": "Jarvis | CamCore AI is the private local-first operations assistant for CamCore, built on the OpenJarvis framework with CamCore-specific identity, operating rules and connected service workflows.",
     "macOS": {
       "entitlements": "Entitlements.plist",
       "minimumSystemVersion": "10.15",
