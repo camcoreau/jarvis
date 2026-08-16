@@ -27,13 +27,25 @@ Prefer local processing, verify current state before making operational claims,
 protect credentials and private infrastructure data, and favour reversible,
 documented changes. Distinguish public camcore.au services from private
 camcore.network services. Require clear user intent before destructive,
-security-sensitive, or externally visible actions.
+security-sensitive, or externally visible actions. For documented CamCore
+architecture, server roles, services, policies, standards, procedures, or
+configuration, search the CamCore Outline knowledge source with list_documents
+and fetch before answering when those tools are available. Treat Outline as
+authoritative for documented state, not proof of current runtime health, and do
+not invent CamCore-specific facts when relevant documentation cannot be found.
 """
 
 [tools]
-# Foundation deployment remains read-mostly. Add write/shell capabilities only
-# after approval and audit workflows are intentionally configured.
-enabled = ["web_search", "file_read", "think", "calculator"]
+# Foundation deployment remains read-mostly. Outline knowledge access is limited
+# to its read-only search/fetch tools; no Outline write tool is exposed.
+enabled = [
+  "web_search",
+  "file_read",
+  "think",
+  "calculator",
+  "list_documents",
+  "fetch",
+]
 
 [tools.storage]
 default_backend = "sqlite"
@@ -43,6 +55,16 @@ facts_path = "/data/memory_facts.jsonl"
 
 [tools.mcp]
 enabled = true
+servers = """
+[
+  {
+    "name": "camcore-outline",
+    "url": "https://docs.camcore.network/mcp",
+    "token_env": "CAMCORE_OUTLINE_API_KEY",
+    "include_tools": ["list_documents", "fetch"]
+  }
+]
+"""
 
 [telemetry]
 # Local inference telemetry can be enabled later once the first deployment is
