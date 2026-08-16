@@ -148,6 +148,28 @@ class TestLoaderTokenPlumbing:
             for record in caplog.records
         )
 
+    def test_blank_token_env_skips_server(self, _mock_mcp_stack, caplog):
+        """An explicit but blank token_env must not downgrade to anonymous access."""
+        from openjarvis.mcp.loader import load_mcp_tools_from_config
+
+        cfg = _make_mcp_cfg(
+            enabled=True,
+            servers=[
+                {
+                    "name": "outline",
+                    "url": "https://docs.example.test/mcp",
+                    "token_env": "",
+                }
+            ],
+        )
+        with caplog.at_level("WARNING"):
+            tools, clients = load_mcp_tools_from_config(cfg)
+
+        assert tools == []
+        assert clients == []
+        _mock_mcp_stack["http"].assert_not_called()
+        assert any("invalid token_env" in record.message for record in caplog.records)
+
     def test_literal_token_takes_precedence_over_token_env(self, _mock_mcp_stack):
         """Existing literal token configs remain backward compatible."""
         from openjarvis.mcp.loader import load_mcp_tools_from_config
