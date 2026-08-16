@@ -67,6 +67,9 @@ FROM python:3.12.13-slim-bookworm@sha256:76d4b7b6305788c6b4c6a19d6a22a3921bf802e
 
 COPY --from=builder /usr/local /usr/local
 COPY --from=builder /app /app
+# CamCore's immutable production image carries its read-only server profile so
+# Portainer Git stacks do not depend on host bind mounts from the checkout.
+COPY deploy/camcore/config.toml /etc/openjarvis/camcore-config.toml
 WORKDIR /app
 
 # Run as an unprivileged user — the server needs no root privileges, so dropping
