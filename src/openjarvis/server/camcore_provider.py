@@ -181,9 +181,7 @@ def provider_status(
                     else local_model
                 ),
                 "privacy": (
-                    "cloud-possible"
-                    if normalized_role == "member"
-                    else "local-first"
+                    "cloud-possible" if normalized_role == "member" else "local-first"
                 ),
             },
             {
