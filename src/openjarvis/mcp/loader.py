@@ -54,6 +54,10 @@ def load_mcp_tools_from_config(
     causes that MCP server to be skipped so authenticated integrations fail
     closed instead of silently connecting without credentials.
 
+    HTTP servers may also define a ``headers`` object for non-secret routing
+    headers such as ``Host`` or ``X-Forwarded-Proto``. Reserved protocol and
+    authentication headers are rejected by the transport.
+
     Returns ``([], [])`` when mcp is disabled or no servers are
     configured — no exception, no warning.
     """
@@ -95,6 +99,7 @@ def load_mcp_tools_from_config(
             url = cfg.get("url")
             token = cfg.get("token")
             token_env = cfg.get("token_env")
+            headers = cfg.get("headers")
             command = cfg.get("command", "")
             args = cfg.get("args", [])
 
@@ -115,7 +120,16 @@ def load_mcp_tools_from_config(
                             token_env,
                         )
                         continue
-                transport = StreamableHTTPTransport(url=url, token=token)
+                if headers is not None and not isinstance(headers, dict):
+                    logger.warning(
+                        "MCP server '%s' has a non-object headers value — skipping",
+                        name,
+                    )
+                    continue
+                transport_kwargs: dict[str, Any] = {"url": url, "token": token}
+                if headers:
+                    transport_kwargs["headers"] = headers
+                transport = StreamableHTTPTransport(**transport_kwargs)
             elif command:
                 transport = StdioTransport(command=[command] + args)
             else:
