@@ -1,4 +1,4 @@
-"""Tests for the CamCore member-safe portal chat route."""
+"""Tests for CamCore portal chat routes."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import pytest
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
+from openjarvis.agents._stubs import AgentResult  # noqa: E402
 from openjarvis.core.config import JarvisConfig  # noqa: E402
 from openjarvis.core.types import Role  # noqa: E402
 from openjarvis.server.app import create_app  # noqa: E402
@@ -63,6 +64,20 @@ def _agent():
     agent._tools = [MagicMock()]
     agent._model = "server-model"
     return agent
+
+
+class _OperationsAgent:
+    models_used: list[str] = []
+
+    def __init__(self) -> None:
+        self.agent_id = "camcore_assistant"
+        self._tools = [MagicMock()]
+        self._model = "server-model"
+        self._loop_guard = None
+
+    def run(self, input: str, context=None):
+        type(self).models_used.append(self._model)
+        return AgentResult(content=f"Operations via {self._model}")
 
 
 def test_member_chat_bypasses_agent_memory_and_caller_system_prompt():
@@ -142,6 +157,77 @@ def test_member_stream_is_direct_and_not_persisted():
     assert engine.stream_temperature == 0.2
     assert engine.stream_messages[0].role == Role.SYSTEM
     assert "operational tools" in engine.stream_messages[0].content
+
+
+def test_member_openai_remains_tool_and_memory_free(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-token")
+    monkeypatch.setenv("CAMCORE_OPENAI_MODEL", "gpt-5.6")
+    engine = _engine()
+    engine.list_models.return_value = ["server-model", "gpt-5.4"]
+    agent = _agent()
+    memory = _MemorySpy()
+    app = create_app(
+        engine,
+        "server-model",
+        agent=agent,
+        memory_service=memory,
+        config=_config(),
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/camcore/portal/chat/completions",
+        headers={"X-CamCore-Provider": "openai"},
+        json={
+            "model": "ignored-model",
+            "messages": [{"role": "user", "content": "Write a short note."}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert engine.generate.call_args.kwargs["model"] == "gpt-5.6"
+    agent.run.assert_not_called()
+    assert memory.submissions == []
+
+
+def test_admin_openai_uses_request_local_agent(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-token")
+    monkeypatch.setenv("CAMCORE_OPENAI_MODEL", "gpt-5.6")
+    engine = _engine()
+    engine.list_models.return_value = ["server-model", "gpt-5.4"]
+    agent = _OperationsAgent()
+    _OperationsAgent.models_used.clear()
+    app = create_app(engine, "server-model", agent=agent, config=_config())
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/camcore/portal/operations/chat/completions",
+        headers={"X-CamCore-Provider": "openai"},
+        json={
+            "model": "ignored-model",
+            "messages": [{"role": "user", "content": "Inspect safely."}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["model"] == "gpt-5.6"
+    assert "Operations via gpt-5.6" in response.json()["choices"][0]["message"]["content"]
+    assert _OperationsAgent.models_used == ["gpt-5.6"]
+    assert agent._model == "server-model"
+
+
+def test_provider_status_never_exposes_openai_key(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "do-not-return-this")
+    engine = _engine()
+    engine.list_models.return_value = ["server-model", "gpt-5.4"]
+    app = create_app(engine, "server-model", config=_config())
+    client = TestClient(app)
+
+    response = client.get("/v1/camcore/portal/providers?role=member")
+
+    assert response.status_code == 200
+    assert response.json()["autoResolved"] == "openai"
+    assert "do-not-return-this" not in response.text
 
 
 def test_member_chat_requires_user_message():
