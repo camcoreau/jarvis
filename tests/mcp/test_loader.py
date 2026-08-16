@@ -124,7 +124,7 @@ class TestLoaderTokenPlumbing:
         )
 
     def test_missing_token_env_skips_server(self, _mock_mcp_stack, caplog):
-        """Authenticated MCP integrations fail closed when their env secret is absent."""
+        """Fail closed when an authenticated MCP environment secret is absent."""
         from openjarvis.mcp.loader import load_mcp_tools_from_config
 
         cfg = _make_mcp_cfg(
