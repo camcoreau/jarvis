@@ -186,6 +186,42 @@ def test_member_openai_remains_tool_and_memory_free(monkeypatch):
 
     assert response.status_code == 200
     assert engine.generate.call_args.kwargs["model"] == "gpt-5.6"
+    assert engine.generate.call_args.kwargs["temperature"] == 1.0
+    agent.run.assert_not_called()
+    assert memory.submissions == []
+
+
+def test_member_openai_stream_uses_gpt56_default_temperature(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-token")
+    monkeypatch.setenv("CAMCORE_OPENAI_MODEL", "gpt-5.6")
+    engine = _engine()
+    engine.list_models.return_value = ["server-model", "gpt-5.4"]
+    agent = _agent()
+    memory = _MemorySpy()
+    app = create_app(
+        engine,
+        "server-model",
+        agent=agent,
+        memory_service=memory,
+        config=_config(),
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/camcore/portal/chat/completions",
+        headers={"X-CamCore-Provider": "openai"},
+        json={
+            "model": "ignored-model",
+            "messages": [{"role": "user", "content": "Stream a short note."}],
+            "stream": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert '"provider": "openai"' in response.text
+    assert "Safe" in response.text
+    assert engine.stream_model == "gpt-5.6"
+    assert engine.stream_temperature == 1.0
     agent.run.assert_not_called()
     assert memory.submissions == []
 
