@@ -157,10 +157,52 @@ def _document_ids(raw: str) -> list[str]:
     return ids
 
 
+def _search_summary(raw: str) -> str:
+    """Expose only titles/search context, never Outline IDs or internal URLs."""
+
+    payload = _json_value(raw)
+    if payload is None:
+        return ""
+
+    matches: list[str] = []
+
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            document = value.get("document")
+            if isinstance(document, dict):
+                title = document.get("title")
+                context = value.get("context")
+                if isinstance(title, str) and title.strip():
+                    entry = f"Document: {title.strip()}"
+                    if isinstance(context, str) and context.strip():
+                        entry += f"\nSearch context: {context.strip()}"
+                    if entry not in matches:
+                        matches.append(entry)
+            for child in value.values():
+                walk(child)
+        elif isinstance(value, list):
+            for child in value:
+                walk(child)
+
+    walk(payload)
+    return "\n\n".join(matches[:_MAX_SEARCH_RESULTS])
+
+
+def _document_text(raw: str) -> str:
+    """Drop Outline's leading JSON metadata object from ``fetch`` output."""
+
+    lines = raw.splitlines()
+    if not lines:
+        return ""
+    if lines[0].lstrip().startswith("{") and _json_value(lines[0]) is not None:
+        lines = lines[1:]
+    return "\n".join(lines)
+
+
 def _relevant_excerpt(raw: str, query: str) -> str:
     """Return small windows around query terms instead of a whole internal doc."""
 
-    lines = raw.splitlines()
+    lines = _document_text(raw).splitlines()
     if not lines:
         return ""
 
@@ -228,7 +270,9 @@ def build_member_knowledge_context(agent: Any, query: str) -> str:
         return ""
 
     parts: list[str] = []
-    safe_search = _redact_member_knowledge(raw_search)[:_MAX_SEARCH_CONTEXT_CHARS]
+    safe_search = _redact_member_knowledge(_search_summary(raw_search))[
+        :_MAX_SEARCH_CONTEXT_CHARS
+    ]
     if safe_search:
         parts.append(f"Outline search matches:\n{safe_search}")
 
@@ -241,8 +285,7 @@ def build_member_knowledge_context(agent: Any, query: str) -> str:
         if not getattr(result, "success", False):
             continue
         raw_document = str(getattr(result, "content", "") or "")
-        excerpt = _relevant_excerpt(raw_document, query)
-        excerpt = _redact_member_knowledge(excerpt)
+        excerpt = _redact_member_knowledge(_relevant_excerpt(raw_document, query))
         if excerpt:
             parts.append(f"Verified document excerpt:\n{excerpt}")
 
