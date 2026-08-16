@@ -1,6 +1,6 @@
 """CamCore Local/OpenAI provider policy for the signed-in portal.
 
-Provider selection is deliberately server-side.  The browser may request a mode,
+Provider selection is deliberately server-side. The browser may request a mode,
 but this module decides whether that mode is permitted for the authenticated role
 and whether the configured cloud provider is actually available.
 """
@@ -11,7 +11,15 @@ import os
 from dataclasses import dataclass
 from typing import Mapping
 
+from openjarvis.engine.cloud import PRICING
+
 VALID_PROVIDERS = frozenset({"auto", "local", "openai"})
+
+# OpenAI's gpt-5.6 alias routes to GPT-5.6 Sol. Defining the exact alias here
+# prevents CloudEngine's generic prefix pricing lookup from matching the older
+# gpt-5 entry first. Cached-input pricing is not represented by the upstream
+# two-value PRICING structure, so this records the standard input/output rates.
+PRICING["gpt-5.6"] = (5.00, 30.00)
 
 
 def _env_bool(environment: Mapping[str, str], name: str, default: bool) -> bool:
@@ -57,11 +65,10 @@ def _engine_has_openai(engine: object, model: str) -> bool:
         return False
     if model in models:
         return True
-    # MultiEngine advertises the CloudEngine's curated model list.  A newly
-    # released gpt-* alias can still be routable before that curated list is
-    # updated, so the presence of any advertised gpt-* model proves that the
-    # OpenAI client is active and MultiEngine can route the requested alias by
-    # its gpt-* prefix.
+    # MultiEngine advertises CloudEngine's curated model list. A newly released
+    # gpt-* alias can still be routable before that curated list is updated, so
+    # any advertised gpt-* model proves the OpenAI client is active and
+    # MultiEngine can route the requested alias by prefix.
     return model.startswith("gpt-") and any(item.startswith("gpt-") for item in models)
 
 
