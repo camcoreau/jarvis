@@ -21,7 +21,7 @@ class _SearchTool:
     def execute(self, **params):
         self.calls.append(params)
         query = params.get("query", "")
-        if query == "documentation marker":
+        if query == "marker":
             content = json.dumps(
                 {
                     "document": {
@@ -89,7 +89,7 @@ class _FetchTool:
         return ToolResult(tool_name="fetch", content=body, success=True)
 
 
-def test_ambiguous_broad_search_prioritises_focused_results_before_fetching():
+def test_ambiguous_broad_search_prioritises_distinctive_results_before_fetching():
     client = object()
     search = _SearchTool(client)
     fetch = _FetchTool(client)
@@ -104,9 +104,10 @@ def test_ambiguous_broad_search_prioritises_focused_results_before_fetching():
 
     assert search.calls == [
         {"query": query, "limit": 5},
-        {"query": "documentation marker", "limit": 5},
+        {"query": "marker", "limit": 5},
     ]
     assert fetch.calls[0] == {"resource": "document", "id": "doc-validation"}
     assert len(fetch.calls) <= 2
     assert "GREEN-WOMBAT-9642" in context
     assert "Jarvis Member Knowledge Validation" in context
+    assert "General CamCore documentation and troubleshooting steps." not in context
