@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 from typing import Any, List, Optional
 
@@ -41,14 +42,12 @@ Operating principles:
   checked next.
 
 CamCore knowledge source:
-- For documented CamCore architecture, server roles, services, policies, standards,
-  procedures, or configuration, consult the CamCore Outline knowledge source before
-  answering when the relevant MCP tools are available.
-- Use ``list_documents`` to find relevant documentation and ``fetch`` to read the
-  selected document before relying on it.
-- Treat Outline as authoritative for documented state, but not as proof of current
-  runtime health, reachability, or live service status.
-- If no relevant documentation is found, say so and do not invent undocumented
+- Documented CamCore architecture, server roles, services, policies, standards,
+  procedures, or configuration may be preloaded server-side from the read-only
+  CamCore Outline knowledge source before you answer.
+- Treat freshly preloaded Outline content as authoritative for documented state, but
+  not as proof of current runtime health, reachability, or live service status.
+- If no relevant documentation is supplied, say so and do not invent undocumented
   CamCore-specific facts.
 
 Be concise, practical, and operationally focused. Explain risks before recommending
@@ -67,6 +66,8 @@ This prefetch is deliberately bounded and sanitised before model exposure. If an
 authorised operational task genuinely needs additional restricted detail, use the
 approved Operations tools rather than inferring it or substituting public search.
 """
+
+_OUTLINE_MODEL_TOOL_NAMES = {"list_documents", "fetch"}
 
 
 def _guardrail_redact_operations_context(text: str) -> str:
@@ -145,6 +146,46 @@ def _with_operations_outline_context(
     return enriched
 
 
+def _is_server_side_outline_tool(tool: Any) -> bool:
+    """Identify the two read-only Outline MCP tools reserved for server retrieval."""
+
+    if getattr(tool, "tool_id", None) != "mcp_adapter":
+        return False
+    try:
+        name = str(tool.spec.name or "").strip().rsplit(":", 1)[-1]
+    except Exception:
+        return False
+    return name in _OUTLINE_MODEL_TOOL_NAMES
+
+
+def _operations_model_view(agent: Any) -> Any:
+    """Return a request-local agent view that cannot call raw Outline MCP tools.
+
+    The full agent keeps ``list_documents`` and ``fetch`` attached so trusted
+    server-side retrieval can run before inference. The model-facing clone removes
+    those tools from both the advertised tool schema and executor, preventing a
+    redundant model-selected Outline call from feeding an unsanitised MCP result into
+    a later Guardrails-scanned inference turn. Other Operations tools are unchanged.
+    """
+
+    cloned = copy.copy(agent)
+    filtered_tools = [
+        tool
+        for tool in (getattr(agent, "_tools", None) or [])
+        if not _is_server_side_outline_tool(tool)
+    ]
+    cloned._tools = filtered_tools
+
+    executor = getattr(agent, "_executor", None)
+    if executor is not None:
+        cloned._executor = copy.copy(executor)
+        cloned._executor._tools = {tool.spec.name: tool for tool in filtered_tools}
+
+    # Loop guards carry per-run mutable state; a request-local view starts clean.
+    cloned._loop_guard = None
+    return cloned
+
+
 @AgentRegistry.register("camcore_assistant")
 class CamCoreAssistantAgent(OrchestratorAgent):
     """CamCore-specific orchestrator with a safety-focused default persona."""
@@ -195,4 +236,6 @@ class CamCoreAssistantAgent(OrchestratorAgent):
         knowledge_context = _fresh_operations_outline_context(self, input)
         if knowledge_context:
             context = _with_operations_outline_context(context, knowledge_context)
-        return super().run(input, context=context, **kwargs)
+
+        run_agent = _operations_model_view(self)
+        return OrchestratorAgent.run(run_agent, input, context=context, **kwargs)
