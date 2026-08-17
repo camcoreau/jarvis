@@ -205,9 +205,7 @@ class TestCamCorePortainerContainerStatus:
 class TestCamCorePortainerLogs:
     def test_logs_are_redacted_before_return_to_model(self):
         response = MagicMock()
-        response.content = (
-            b"user=person@example.com API_KEY=THIS-IS-SECRET\n"
-        )
+        response.content = b"user=person@example.com API_KEY=THIS-IS-SECRET\n"
         with (
             patch.object(
                 portainer._PortainerClient,
@@ -221,9 +219,7 @@ class TestCamCorePortainerLogs:
             ),
             patch(
                 "openjarvis.tools.camcore_portainer._redact_sensitive",
-                return_value=(
-                    "user=[REDACTED] API_KEY=[REDACTED]\n"
-                ),
+                return_value=("user=[REDACTED] API_KEY=[REDACTED]\n"),
             ),
         ):
             result = portainer.CamCorePortainerContainerLogsTool().execute(
@@ -247,9 +243,7 @@ class TestCamCorePortainerLogs:
             + len(second).to_bytes(4, "big")
             + second
         )
-        assert portainer._decode_docker_log_stream(data) == (
-            "hello\nerror\n"
-        )
+        assert portainer._decode_docker_log_stream(data) == ("hello\nerror\n")
 
 
 class TestCamCorePortainerAction:

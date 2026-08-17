@@ -59,9 +59,7 @@ class _PortainerClient:
     """Small fixed-target client for the configured Portainer API origin."""
 
     def __init__(self) -> None:
-        self.base_url = (
-            os.environ.get("CAMCORE_PORTAINER_URL", "").strip().rstrip("/")
-        )
+        self.base_url = os.environ.get("CAMCORE_PORTAINER_URL", "").strip().rstrip("/")
         self.api_key = os.environ.get("CAMCORE_PORTAINER_API_KEY", "").strip()
         self.verify_tls = _env_bool("CAMCORE_PORTAINER_VERIFY_TLS", True)
 
@@ -141,13 +139,9 @@ def _endpoint_name(endpoint: dict[str, Any]) -> str:
 def _list_endpoints(client: _PortainerClient) -> list[dict[str, Any]]:
     data = client.json("GET", "endpoints")
     if not isinstance(data, list):
-        raise _PortainerRequestError(
-            "Portainer environment list had an invalid shape."
-        )
+        raise _PortainerRequestError("Portainer environment list had an invalid shape.")
     return [
-        item
-        for item in data
-        if isinstance(item, dict) and item.get("Id") is not None
+        item for item in data if isinstance(item, dict) and item.get("Id") is not None
     ]
 
 
@@ -267,9 +261,7 @@ def _find_container(
         for container in containers:
             container_id = str(container.get("Id") or "")
             names = _container_names(container)
-            name_match = wanted_folded in {
-                name.casefold() for name in names
-            }
+            name_match = wanted_folded in {name.casefold() for name in names}
             id_match = container_id.casefold() == wanted_folded
             prefix_match = container_id.casefold().startswith(wanted_folded)
             if name_match or id_match or prefix_match:
@@ -283,9 +275,7 @@ def _find_container(
             if environment is not None and str(environment).strip()
             else ""
         )
-        raise _PortainerRequestError(
-            f"Container '{wanted}' was not found{scope}."
-        )
+        raise _PortainerRequestError(f"Container '{wanted}' was not found{scope}.")
 
     labels = ", ".join(
         f"{_endpoint_name(endpoint)}/{_primary_container_name(container)}"
@@ -422,19 +412,14 @@ class CamCorePortainerOverviewTool(BaseTool):
                         include_stopped=include_stopped,
                     )
                     summaries = [
-                        _container_summary(container)
-                        for container in containers
+                        _container_summary(container) for container in containers
                     ]
                     item["container_count"] = len(summaries)
                     item["running"] = sum(
-                        1
-                        for value in summaries
-                        if value["state"] == "running"
+                        1 for value in summaries if value["state"] == "running"
                     )
                     item["unhealthy"] = sum(
-                        1
-                        for value in summaries
-                        if value.get("health") == "unhealthy"
+                        1 for value in summaries if value.get("health") == "unhealthy"
                     )
                     item["containers"] = sorted(
                         summaries,
@@ -530,9 +515,7 @@ class CamCorePortainerContainerStatusTool(BaseTool):
             networks = network_settings.get("Networks") or {}
             mounts = inspect.get("Mounts") or []
             network_names = (
-                sorted(networks.keys())
-                if isinstance(networks, dict)
-                else []
+                sorted(networks.keys()) if isinstance(networks, dict) else []
             )
             payload: dict[str, Any] = {
                 "source": "Portainer live API",
@@ -601,9 +584,7 @@ class CamCorePortainerContainerLogsTool(BaseTool):
                     },
                     "environment": {
                         "type": "string",
-                        "description": (
-                            "Optional Portainer environment name or ID."
-                        ),
+                        "description": ("Optional Portainer environment name or ID."),
                     },
                     "tail": {
                         "type": "integer",
@@ -698,9 +679,7 @@ class CamCorePortainerContainerActionTool(BaseTool):
                     },
                     "environment": {
                         "type": "string",
-                        "description": (
-                            "Optional Portainer environment name or ID."
-                        ),
+                        "description": ("Optional Portainer environment name or ID."),
                     },
                     "action": {
                         "type": "string",
@@ -712,8 +691,7 @@ class CamCorePortainerContainerActionTool(BaseTool):
                         "minimum": 1,
                         "maximum": 60,
                         "description": (
-                            "Stop/restart grace period in seconds. "
-                            "Defaults to 10."
+                            "Stop/restart grace period in seconds. Defaults to 10."
                         ),
                     },
                 },
@@ -729,10 +707,7 @@ class CamCorePortainerContainerActionTool(BaseTool):
         if action not in {"start", "stop", "restart"}:
             return ToolResult(
                 tool_name=self.tool_id,
-                content=(
-                    "Unsupported action. Allowed actions: "
-                    "start, stop, restart."
-                ),
+                content=("Unsupported action. Allowed actions: start, stop, restart."),
                 success=False,
             )
         try:
@@ -751,16 +726,11 @@ class CamCorePortainerContainerActionTool(BaseTool):
             endpoint_id = int(endpoint["Id"])
             container_id = str(container["Id"])
             request_params = (
-                {"t": str(timeout)}
-                if action in {"stop", "restart"}
-                else None
+                {"t": str(timeout)} if action in {"stop", "restart"} else None
             )
             client.request(
                 "POST",
-                (
-                    f"endpoints/{endpoint_id}/docker/containers/"
-                    f"{container_id}/{action}"
-                ),
+                (f"endpoints/{endpoint_id}/docker/containers/{container_id}/{action}"),
                 params=request_params,
             )
             return ToolResult(
