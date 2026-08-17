@@ -70,13 +70,60 @@ approved Operations tools rather than inferring it or substituting public search
 _OUTLINE_MODEL_TOOL_NAMES = {"list_documents", "fetch"}
 
 
-def _block_mode_redact(text: str) -> str | None:
-    """Redact server-generated text only when input Guardrails run in BLOCK mode.
+def _active_block_guardrails(engine: Any) -> Any | None:
+    """Find the active BLOCK-mode Guardrails wrapper through known engine layers."""
 
-    The redactors mirror the scanners enabled by the active security configuration.
-    ``None`` means BLOCK mode is active but the redaction pass failed, so callers can
-    fail closed to a known-safe static prompt rather than forwarding unchecked text.
+    try:
+        from openjarvis.security.guardrails import GuardrailsEngine
+        from openjarvis.security.types import RedactionMode
+        from openjarvis.telemetry.instrumented_engine import InstrumentedEngine
+    except Exception:
+        return None
+
+    current = engine
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, GuardrailsEngine):
+            if (
+                getattr(current, "_scan_input", False)
+                and getattr(current, "_mode", None) == RedactionMode.BLOCK
+            ):
+                return current
+            return None
+        if isinstance(current, InstrumentedEngine):
+            current = getattr(current, "_inner", None)
+            continue
+        current = getattr(current, "_inner", None)
+    return None
+
+
+def _block_mode_redact(text: str, engine: Any = None) -> str | None:
+    """Redact trusted server context for the active BLOCK-mode Guardrails policy.
+
+    Prefer the real engine wrapper and its exact scanner instances. This keeps CamCore
+    server-generated context compatible with the policy that will actually scan the
+    request, even if runtime wrappers and configuration are temporarily out of sync.
+    Config-based scanner construction remains a fallback for call sites that do not
+    have an engine reference.
+
+    ``None`` means BLOCK mode is active but redaction failed, allowing the caller to
+    fail closed rather than forwarding unchecked server-generated text.
     """
+
+    guardrails = _active_block_guardrails(engine) if engine is not None else None
+    if guardrails is not None:
+        try:
+            safe = text
+            for scanner in getattr(guardrails, "_scanners", []):
+                safe = scanner.redact(safe)
+            return safe
+        except Exception:
+            logger.warning(
+                "CamCore active Guardrails server context redaction failed",
+                exc_info=True,
+            )
+            return None
 
     try:
         from openjarvis.core.config import load_config
@@ -113,10 +160,10 @@ def _block_mode_redact(text: str) -> str | None:
         return None
 
 
-def _guardrail_redact_operations_context(text: str) -> str:
+def _guardrail_redact_operations_context(text: str, engine: Any = None) -> str:
     """Pre-redact fetched Outline context before Operations model exposure."""
 
-    safe = _block_mode_redact(text)
+    safe = _block_mode_redact(text, engine)
     return safe or ""
 
 
@@ -136,7 +183,10 @@ def _fresh_operations_outline_context(agent: Any, query: str) -> str:
     if not context:
         return ""
 
-    context = _guardrail_redact_operations_context(context)
+    context = _guardrail_redact_operations_context(
+        context,
+        getattr(agent, "_engine", None),
+    )
     if not context:
         return ""
 
@@ -262,9 +312,9 @@ class CamCoreAssistantAgent(OrchestratorAgent):
 
         ``BaseAgent`` always places its generated system prompt first. That prompt can
         include CamCore persona files plus server-generated memory/Outline context. In
-        BLOCK mode we canonical-redact that first server-built message so trusted
-        context cannot block inference. Any later caller-supplied system message and
-        every user message remain untouched and are still fully scanned by Guardrails.
+        BLOCK mode we canonical-redact that first server-built message using the exact
+        active Guardrails scanners. Any later caller-supplied system message and every
+        user message remain untouched and are still fully scanned by Guardrails.
         """
 
         messages = super()._build_messages(
@@ -276,7 +326,7 @@ class CamCoreAssistantAgent(OrchestratorAgent):
             return messages
 
         original = messages[0]
-        safe = _block_mode_redact(original.content)
+        safe = _block_mode_redact(original.content, self._engine)
         if safe is None:
             safe = CAMCORE_SYSTEM_PROMPT
         if safe != original.content:
