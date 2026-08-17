@@ -60,7 +60,15 @@ def test_block_mode_pre_redacts_memory_before_system_prompt_merge(monkeypatch):
     class _Engine:
         engine_id = "test"
 
-        def generate(self, messages, *, model, temperature=0.7, max_tokens=1024, **kwargs):
+        def generate(
+            self,
+            messages,
+            *,
+            model,
+            temperature=0.7,
+            max_tokens=1024,
+            **kwargs,
+        ):
             return {
                 "content": "Memory-safe answer",
                 "usage": {},
