@@ -161,9 +161,9 @@ class TestCamCoreAssistantAgent:
         ]
         assert fetch.calls == [{"resource": "document", "id": "validation-doc"}]
 
-        advertised = engine.generate.call_args.kwargs["tools"]
-        advertised_names = {tool["function"]["name"] for tool in advertised}
-        assert advertised_names == {"calculator"}
+        # A successful answer-only documentation lookup has all callable tools
+        # suppressed so the local Operations model cannot enter a redundant tool loop.
+        assert "tools" not in engine.generate.call_args.kwargs
 
     def test_operations_prefetch_does_not_trip_block_mode_guardrails(self):
         client = object()
@@ -241,6 +241,7 @@ class TestCamCoreAssistantAgent:
             "CamCore documentation marker: GREEN-WOMBAT-9642\n"
             "Contact raw-tool@example.com",
         )
+        calculator = _FakeMcpTool("calculator", client, "42")
         engine = MagicMock()
         engine.engine_id = "mock"
         engine.generate.side_effect = [
@@ -266,16 +267,26 @@ class TestCamCoreAssistantAgent:
         agent = CamCoreAssistantAgent(
             engine,
             "test-model",
-            tools=[search, fetch],
+            tools=[search, fetch, calculator],
         )
 
-        result = agent.run("What is the CamCore documentation marker?")
+        # Explicit operational intent keeps normal Operations tools available while
+        # raw Outline MCP tools remain server-side only.
+        result = agent.run("Restart Earth according to the current CamCore documentation")
 
         assert result.content == "Safe final answer"
         assert search.calls == [
-            {"query": "What is the CamCore documentation marker?", "limit": 5}
+            {
+                "query": "Restart Earth according to the current CamCore documentation",
+                "limit": 5,
+            }
         ]
         assert fetch.calls == [{"resource": "document", "id": "marker-doc"}]
+
+        advertised = engine.generate.call_args_list[0].kwargs["tools"]
+        advertised_names = {tool["function"]["name"] for tool in advertised}
+        assert advertised_names == {"calculator"}
+
         assert result.tool_results[0].success is False
         assert result.tool_results[0].content == "Unknown tool: list_documents"
         second_messages = engine.generate.call_args_list[1].args[0]
