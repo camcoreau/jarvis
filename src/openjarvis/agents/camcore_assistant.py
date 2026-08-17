@@ -69,6 +69,30 @@ approved Operations tools rather than inferring it or substituting public search
 """
 
 
+def _guardrail_redact_operations_context(text: str) -> str:
+    """Pre-redact retrieval with the same scanners used by GuardrailsEngine.
+
+    Operations Outline context is server-generated, but it still passes through the
+    inference engine's BLOCK-mode input scanner. Applying the canonical redactors
+    here prevents already-retrieved documentation from blocking the whole request,
+    without weakening scanning of user input or model output.
+    """
+
+    try:
+        from openjarvis.security.scanner import PIIScanner, SecretScanner
+
+        safe = text
+        for scanner in (SecretScanner(), PIIScanner()):
+            safe = scanner.redact(safe)
+        return safe
+    except Exception:
+        logger.warning(
+            "CamCore operations Outline guardrail redaction failed",
+            exc_info=True,
+        )
+        return ""
+
+
 def _fresh_operations_outline_context(agent: Any, query: str) -> str:
     """Return fresh, bounded Outline context for CamCore Operations questions."""
 
@@ -82,6 +106,10 @@ def _fresh_operations_outline_context(agent: Any, query: str) -> str:
         logger.warning("CamCore operations Outline prefetch failed", exc_info=True)
         return ""
 
+    if not context:
+        return ""
+
+    context = _guardrail_redact_operations_context(context)
     if not context:
         return ""
 
