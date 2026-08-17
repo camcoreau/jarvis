@@ -69,6 +69,110 @@ approved Operations tools rather than inferring it or substituting public search
 
 _OUTLINE_MODEL_TOOL_NAMES = {"list_documents", "fetch"}
 
+_OPERATION_ACTION_PREFIXES = (
+    "restart ",
+    "reboot ",
+    "start ",
+    "stop ",
+    "deploy ",
+    "redeploy ",
+    "update ",
+    "upgrade ",
+    "install ",
+    "uninstall ",
+    "change ",
+    "modify ",
+    "configure ",
+    "set ",
+    "create ",
+    "delete ",
+    "remove ",
+    "disable ",
+    "enable ",
+    "rotate ",
+    "revoke ",
+    "reset ",
+    "migrate ",
+    "move ",
+    "edit ",
+    "write ",
+    "execute ",
+    "run ",
+    "trigger ",
+    "send ",
+    "publish ",
+    "merge ",
+    "pull ",
+    "push ",
+)
+
+_OPERATION_ACTION_REQUEST_PHRASES = tuple(
+    f"{lead} {action.strip()}"
+    for lead in ("can you", "could you", "would you", "will you", "please")
+    for action in _OPERATION_ACTION_PREFIXES
+)
+
+_LIVE_STATE_PHRASES = (
+    "current cpu",
+    "cpu usage",
+    "current memory",
+    "memory usage",
+    "current load",
+    "system load",
+    "current uptime",
+    "live status",
+    "current status",
+    "service status",
+    "is it online",
+    "is it offline",
+    "is it running",
+    "is it reachable",
+    "right now",
+    "latest logs",
+    "current logs",
+)
+
+
+def _is_read_only_documentation_lookup(query: str) -> bool:
+    """Return true for answer-only documentation questions.
+
+    A successful Outline prefetch proves the request is documentation-relevant. This
+    helper only decides whether it is safe to suppress the remaining Operations tool
+    schema for that request. Explicit actions and live-state checks keep normal tools.
+    """
+
+    normalized = " ".join((query or "").strip().lower().split())
+    if not normalized:
+        return False
+
+    if normalized.startswith(_OPERATION_ACTION_PREFIXES):
+        return False
+    if any(phrase in normalized for phrase in _OPERATION_ACTION_REQUEST_PHRASES):
+        return False
+    if any(phrase in normalized for phrase in _LIVE_STATE_PHRASES):
+        return False
+
+    if "according to" in normalized and any(
+        cue in normalized for cue in ("documentation", "docs", "outline")
+    ):
+        return True
+
+    return normalized.startswith(
+        (
+            "what ",
+            "what's ",
+            "who ",
+            "which ",
+            "where ",
+            "when ",
+            "why ",
+            "how ",
+            "describe ",
+            "explain ",
+            "tell me ",
+        )
+    )
+
 
 def _active_block_guardrails(engine: Any) -> Any | None:
     """Find the active BLOCK-mode Guardrails wrapper through known engine layers."""
@@ -230,28 +334,33 @@ def _is_server_side_outline_tool(tool: Any) -> bool:
     return name in _OUTLINE_MODEL_TOOL_NAMES
 
 
-def _operations_model_view(agent: Any) -> Any:
-    """Return a request-local agent view that cannot call raw Outline MCP tools.
+def _operations_model_view(agent: Any, *, allow_tools: bool = True) -> Any:
+    """Return a request-local Operations agent view.
 
-    The full agent keeps ``list_documents`` and ``fetch`` attached so trusted
-    server-side retrieval can run before inference. The model-facing clone removes
-    those tools from both the advertised tool schema and executor, preventing a
-    redundant model-selected Outline call from feeding an unsanitised MCP result into
-    a later Guardrails-scanned inference turn. Other Operations tools are unchanged.
+    Raw Outline MCP tools are always withheld from the model because trusted
+    server-side retrieval owns that boundary. For an answer-only documentation lookup,
+    ``allow_tools=False`` suppresses the remaining Operations schema too and limits the
+    request to one model turn. This prevents a small local model from entering an
+    unnecessary tool loop when the authoritative answer is already in its prompt.
     """
 
     cloned = copy.copy(agent)
-    filtered_tools = [
-        tool
-        for tool in (getattr(agent, "_tools", None) or [])
-        if not _is_server_side_outline_tool(tool)
-    ]
+    filtered_tools = []
+    if allow_tools:
+        filtered_tools = [
+            tool
+            for tool in (getattr(agent, "_tools", None) or [])
+            if not _is_server_side_outline_tool(tool)
+        ]
     cloned._tools = filtered_tools
 
     executor = getattr(agent, "_executor", None)
     if executor is not None:
         cloned._executor = copy.copy(executor)
         cloned._executor._tools = {tool.spec.name: tool for tool in filtered_tools}
+
+    if not allow_tools:
+        cloned._max_turns = 1
 
     # Loop guards carry per-run mutable state; a request-local view starts clean.
     cloned._loop_guard = None
@@ -349,5 +458,6 @@ class CamCoreAssistantAgent(OrchestratorAgent):
         if knowledge_context:
             context = _with_operations_outline_context(context, knowledge_context)
 
-        run_agent = _operations_model_view(self)
+        answer_only = bool(knowledge_context) and _is_read_only_documentation_lookup(input)
+        run_agent = _operations_model_view(self, allow_tools=not answer_only)
         return OrchestratorAgent.run(run_agent, input, context=context, **kwargs)
