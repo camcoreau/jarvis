@@ -42,24 +42,21 @@ def test_fresh_fetch_wins_over_stale_outline_search_context():
             }
         ),
     )
-    fetch = _FakeMcpTool(
-        "fetch",
-        client,
-        "\n".join(
-            [
-                json.dumps(
-                    {
-                        "document": {
-                            "id": "validation-doc",
-                            "title": "Jarvis Member Knowledge Validation",
-                        }
+    fetch_content = "\n".join(
+        [
+            json.dumps(
+                {
+                    "document": {
+                        "id": "validation-doc",
+                        "title": "Jarvis Member Knowledge Validation",
                     }
-                ),
-                "CamCore validation phrase: SILVER-KOALA-4821",
-                "The validation device is called Test Moon.",
-            ]
-        ),
+                }
+            ),
+            "CamCore validation phrase: SILVER-KOALA-4821",
+            "The validation device is called Test Moon.",
+        ]
     )
+    fetch = _FakeMcpTool("fetch", client, fetch_content)
 
     class _Agent:
         _tools = [search, fetch]
@@ -90,12 +87,11 @@ def test_stale_search_snippet_is_not_used_when_fetch_has_no_relevant_excerpt():
             }
         ),
     )
-    fetch = _FakeMcpTool(
-        "fetch",
-        client,
+    fetch_content = (
         '{"document":{"id":"validation-doc","title":"Validation"}}\n'
-        "Unrelated text.",
+        "Unrelated text."
     )
+    fetch = _FakeMcpTool("fetch", client, fetch_content)
 
     class _Agent:
         _tools = [search, fetch]
