@@ -32,6 +32,7 @@ _MAX_FOCUSED_TERMS = 6
 
 _STOP_WORDS = {
     "about",
+    "according",
     "after",
     "again",
     "also",
@@ -39,6 +40,7 @@ _STOP_WORDS = {
     "are",
     "camcore",
     "can",
+    "current",
     "does",
     "for",
     "from",
@@ -329,13 +331,21 @@ def build_member_knowledge_context(agent: Any, query: str) -> str:
         return ""
 
     document_ids = _document_ids(raw_search)
-    if not document_ids:
-        focused_query = _focused_query(query)
-        if focused_query and focused_query.casefold() != query.casefold():
-            logger.info("CamCore member knowledge retrying focused Outline search")
-            focused_search = _run_search(list_tool, focused_query)
-            if focused_search is not None:
-                document_ids = _document_ids(focused_search)
+    focused_query = _focused_query(query)
+    if (
+        focused_query
+        and focused_query.casefold() != query.casefold()
+        and len(document_ids) != 1
+    ):
+        logger.info("CamCore member knowledge retrying focused Outline search")
+        focused_search = _run_search(list_tool, focused_query)
+        if focused_search is not None:
+            focused_ids = _document_ids(focused_search)
+            if focused_ids:
+                document_ids = [
+                    *focused_ids,
+                    *(document_id for document_id in document_ids if document_id not in focused_ids),
+                ]
 
     logger.info(
         "CamCore member knowledge search completed with %d document match(es)",
