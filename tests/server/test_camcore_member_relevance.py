@@ -21,15 +21,42 @@ class _SearchTool:
     def execute(self, **params):
         self.calls.append(params)
         query = params.get("query", "")
-        if query == "marker":
-            content = json.dumps(
-                {
-                    "document": {
-                        "id": "doc-validation",
-                        "title": "Jarvis Member Knowledge Validation",
-                    },
-                    "context": "CamCore documentation marker: GREEN-WOMBAT-9642",
-                }
+        if query == "CamCore documentation marker":
+            content = "\n".join(
+                [
+                    json.dumps(
+                        {
+                            "document": {
+                                "id": "doc-support-marker",
+                                "title": "CamCore Support Email Replies",
+                            },
+                            "context": (
+                                "CamCore notification emails ask users to reply "
+                                "above the marker."
+                            ),
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "document": {
+                                "id": "doc-validation",
+                                "title": "Jarvis Member Knowledge Validation",
+                            },
+                            "context": (
+                                "CamCore documentation marker: GREEN-WOMBAT-9642"
+                            ),
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "document": {
+                                "id": "doc-runbook",
+                                "title": "Operational Runbooks",
+                            },
+                            "context": "CamCore documentation lifecycle guidance.",
+                        }
+                    ),
+                ]
             )
         else:
             content = "\n".join(
@@ -59,37 +86,32 @@ class _FetchTool:
         self.calls.append(params)
         document_id = params.get("id")
         if document_id == "doc-validation":
-            body = "\n".join(
-                [
-                    json.dumps(
-                        {
-                            "document": {
-                                "id": "doc-validation",
-                                "title": "Jarvis Member Knowledge Validation",
-                            }
-                        }
-                    ),
-                    "CamCore documentation marker: GREEN-WOMBAT-9642",
-                ]
-            )
+            title = "Jarvis Member Knowledge Validation"
+            content = "CamCore documentation marker: GREEN-WOMBAT-9642"
+        elif document_id == "doc-support-marker":
+            title = "CamCore Support Email Replies"
+            content = "Reply above the marker in CamCore notification emails."
         else:
-            body = "\n".join(
-                [
-                    json.dumps(
-                        {
-                            "document": {
-                                "id": document_id,
-                                "title": "Operations Runbook",
-                            }
+            title = "Operations Runbook"
+            content = "General CamCore documentation and troubleshooting steps."
+
+        body = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "document": {
+                            "id": document_id,
+                            "title": title,
                         }
-                    ),
-                    "General CamCore documentation and troubleshooting steps.",
-                ]
-            )
+                    }
+                ),
+                content,
+            ]
+        )
         return ToolResult(tool_name="fetch", content=body, success=True)
 
 
-def test_ambiguous_broad_search_prioritises_distinctive_results_before_fetching():
+def test_phrase_ranking_beats_unrelated_support_marker_before_fetching():
     client = object()
     search = _SearchTool(client)
     fetch = _FetchTool(client)
@@ -104,10 +126,12 @@ def test_ambiguous_broad_search_prioritises_distinctive_results_before_fetching(
 
     assert search.calls == [
         {"query": query, "limit": 5},
-        {"query": "marker", "limit": 5},
+        {"query": "CamCore documentation marker", "limit": 5},
     ]
     assert fetch.calls[0] == {"resource": "document", "id": "doc-validation"}
     assert len(fetch.calls) <= 2
     assert "GREEN-WOMBAT-9642" in context
     assert "Jarvis Member Knowledge Validation" in context
+    assert "Reply above the marker" not in context
+    assert "CamCore Support Email Replies" not in context
     assert "General CamCore documentation and troubleshooting steps." not in context
