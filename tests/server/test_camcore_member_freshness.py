@@ -87,9 +87,18 @@ def test_stale_search_snippet_is_not_used_when_fetch_has_no_relevant_excerpt():
             }
         ),
     )
-    fetch_content = (
-        '{"document":{"id":"validation-doc","title":"Validation"}}\n'
-        "Unrelated text."
+    fetch_content = "\n".join(
+        [
+            json.dumps(
+                {
+                    "document": {
+                        "id": "validation-doc",
+                        "title": "Validation",
+                    }
+                }
+            ),
+            "Unrelated text.",
+        ]
     )
     fetch = _FakeMcpTool("fetch", client, fetch_content)
 
