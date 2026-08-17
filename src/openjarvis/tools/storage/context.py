@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, List, Optional, Sequence
 
@@ -11,6 +12,8 @@ from openjarvis.tools.storage._stubs import MemoryBackend, RetrievalResult
 
 if TYPE_CHECKING:
     from openjarvis.memory.store import Fact
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -72,6 +75,53 @@ def build_context_message(
         content=content,
         metadata={"memory_context": True},
     )
+
+
+def _guardrail_safe_memory_context(text: str) -> str:
+    """Pre-redact memory only when BLOCK-mode input scanning requires it.
+
+    Retrieved memory and durable facts are server-generated context, but the
+    Guardrails engine scans the merged system prompt before inference. In
+    BLOCK mode, a remembered email address, IP address, API key, or similar
+    scanner match would otherwise block an unrelated request before the model
+    can answer. Mirror the scanners that are enabled in the active security
+    configuration and redact only for BLOCK-mode input scanning.
+
+    Other security modes keep their existing behaviour. If BLOCK mode is
+    known to be active but the redaction step itself fails, omit the memory
+    context rather than passing an unprocessed block-triggering value onward.
+    """
+
+    try:
+        from openjarvis.core.config import load_config
+
+        security = load_config().security
+    except Exception:
+        logger.debug("Unable to resolve security config for memory context", exc_info=True)
+        return text
+
+    if (
+        not getattr(security, "enabled", False)
+        or not getattr(security, "scan_input", False)
+        or str(getattr(security, "mode", "")).lower() != "block"
+    ):
+        return text
+
+    try:
+        from openjarvis.security.scanner import PIIScanner, SecretScanner
+
+        safe = text
+        if getattr(security, "secret_scanner", False):
+            safe = SecretScanner().redact(safe)
+        if getattr(security, "pii_scanner", False):
+            safe = PIIScanner().redact(safe)
+        return safe
+    except Exception:
+        logger.warning(
+            "BLOCK-mode memory context redaction failed; omitting memory context",
+            exc_info=True,
+        )
+        return ""
 
 
 def _merge_context_message(
@@ -191,8 +241,14 @@ def inject_context(
         },
     )
 
-    # Build context message and prepend
+    # Build and, when BLOCK-mode Guardrails requires it, pre-redact only the
+    # server-generated memory section before folding it into the system prompt.
     ctx_msg = build_context_message(truncated, selected_facts)
+    safe_content = _guardrail_safe_memory_context(ctx_msg.content)
+    if not safe_content:
+        return messages
+    if safe_content != ctx_msg.content:
+        ctx_msg = replace(ctx_msg, content=safe_content)
     return _merge_context_message(messages, ctx_msg)
 
 
