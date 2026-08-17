@@ -279,7 +279,9 @@ class TestCamCoreAssistantAgent:
         assert result.tool_results[0].success is False
         assert result.tool_results[0].content == "Unknown tool: list_documents"
         second_messages = engine.generate.call_args_list[1].args[0]
-        tool_messages = [message for message in second_messages if message.role == Role.TOOL]
+        tool_messages = [
+            message for message in second_messages if message.role == Role.TOOL
+        ]
         assert len(tool_messages) == 1
         assert tool_messages[0].content == "Unknown tool: list_documents"
         assert "raw-tool@example.com" not in tool_messages[0].content
