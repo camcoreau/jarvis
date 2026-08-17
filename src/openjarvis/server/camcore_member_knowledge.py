@@ -344,7 +344,11 @@ def build_member_knowledge_context(agent: Any, query: str) -> str:
             if focused_ids:
                 document_ids = [
                     *focused_ids,
-                    *(document_id for document_id in document_ids if document_id not in focused_ids),
+                    *(
+                        document_id
+                        for document_id in document_ids
+                        if document_id not in focused_ids
+                    ),
                 ]
 
     logger.info(
