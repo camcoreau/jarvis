@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import importlib
 import json
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 import openjarvis.agents.camcore_assistant as camcore_assistant_module
+from openjarvis.agents._stubs import AgentContext
 from openjarvis.agents.camcore_assistant import (
     CAMCORE_SYSTEM_PROMPT,
     CamCoreAssistantAgent,
 )
 from openjarvis.core.registry import AgentRegistry
-from openjarvis.core.types import Role, ToolResult
-from openjarvis.security.guardrails import GuardrailsEngine
+from openjarvis.core.types import Message, Role, ToolResult
+from openjarvis.security.guardrails import GuardrailsEngine, SecurityBlockError
 from openjarvis.security.types import RedactionMode
 from openjarvis.tools._stubs import ToolSpec
 
@@ -28,6 +32,26 @@ def _make_engine(content: str = "CamCore is healthy.") -> MagicMock:
         "finish_reason": "stop",
     }
     return engine
+
+
+def _block_security_config():
+    return SimpleNamespace(
+        security=SimpleNamespace(
+            enabled=True,
+            scan_input=True,
+            mode="block",
+            secret_scanner=True,
+            pii_scanner=True,
+        )
+    )
+
+
+class _PromptBuilder:
+    def build(self):
+        return (
+            "CamCore server persona contact admin@example.com and test host "
+            "192.0.2.44."
+        )
 
 
 class _FakeMcpTool:
@@ -96,6 +120,47 @@ class TestCamCoreAssistantAgent:
 
         messages = engine.generate.call_args[0][0]
         assert messages[0].content == "Custom CamCore prompt"
+
+    def test_block_mode_redacts_only_server_built_system_prompt(self, monkeypatch):
+        underlying = _make_engine("Safe answer")
+        guarded = GuardrailsEngine(underlying, mode=RedactionMode.BLOCK)
+        agent = CamCoreAssistantAgent(
+            guarded,
+            "test-model",
+            prompt_builder=_PromptBuilder(),
+        )
+        monkeypatch.setattr(
+            "openjarvis.core.config.load_config",
+            _block_security_config,
+        )
+
+        result = agent.run("Check CamCore")
+
+        assert result.content == "Safe answer"
+        messages = underlying.generate.call_args.args[0]
+        assert messages[0].role == Role.SYSTEM
+        assert "admin@example.com" not in messages[0].content
+        assert "192.0.2.44" not in messages[0].content
+        assert "[REDACTED:email]" in messages[0].content
+        assert "[REDACTED:ipv4_address]" in messages[0].content
+
+    def test_block_mode_does_not_redact_caller_system_message(self, monkeypatch):
+        guarded = GuardrailsEngine(_make_engine(), mode=RedactionMode.BLOCK)
+        agent = CamCoreAssistantAgent(guarded, "test-model")
+        monkeypatch.setattr(
+            "openjarvis.core.config.load_config",
+            _block_security_config,
+        )
+        context = AgentContext()
+        context.conversation.add(
+            Message(
+                role=Role.SYSTEM,
+                content="Caller supplied contact admin@example.com",
+            )
+        )
+
+        with pytest.raises(SecurityBlockError):
+            agent.run("Check CamCore", context=context)
 
     def test_operations_prefetch_prefers_fresh_outline_fetch(self):
         client = object()
