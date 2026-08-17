@@ -272,15 +272,11 @@ class TestCamCoreAssistantAgent:
 
         # Explicit operational intent keeps normal Operations tools available while
         # raw Outline MCP tools remain server-side only.
-        result = agent.run("Restart Earth according to the current CamCore documentation")
+        query = "Restart Earth according to the current CamCore documentation"
+        result = agent.run(query)
 
         assert result.content == "Safe final answer"
-        assert search.calls == [
-            {
-                "query": "Restart Earth according to the current CamCore documentation",
-                "limit": 5,
-            }
-        ]
+        assert search.calls == [{"query": query, "limit": 5}]
         assert fetch.calls == [{"resource": "document", "id": "marker-doc"}]
 
         advertised = engine.generate.call_args_list[0].kwargs["tools"]
