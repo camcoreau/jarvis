@@ -535,8 +535,7 @@ def build_member_knowledge_context(agent: Any, query: str) -> str:
         len(document_ids),
     )
 
-    parts: list[str] = []
-    fetched_excerpts = 0
+    fetched_parts: list[tuple[int, str]] = []
     for document_id in document_ids[:_MAX_FETCHED_DOCUMENTS]:
         try:
             result = fetch_tool.execute(resource="document", id=document_id)
@@ -554,18 +553,34 @@ def build_member_knowledge_context(agent: Any, query: str) -> str:
 
         title = _redact_member_knowledge(_document_title(raw_document))
         if title:
-            parts.append(f"Verified document: {title}\n{excerpt}")
+            formatted = f"Verified document: {title}\n{excerpt}"
         else:
-            parts.append(f"Verified document excerpt:\n{excerpt}")
-        fetched_excerpts += 1
+            formatted = f"Verified document excerpt:\n{excerpt}"
 
-    if not parts:
+        fresh_score = _candidate_score(
+            {
+                "id": document_id,
+                "title": title,
+                "context": _document_text(raw_document)[:_MAX_DOCUMENT_EXCERPT_CHARS],
+            },
+            query,
+        )
+        fetched_parts.append((fresh_score, formatted))
+
+    if not fetched_parts:
         logger.info("CamCore member knowledge returned no usable documentation")
         return ""
 
+    fetched_parts.sort(key=lambda item: -item[0])
+    top_score = fetched_parts[0][0]
+    minimum_score = max(1, top_score // 2)
+    parts = [part for score, part in fetched_parts if score >= minimum_score]
+    if not parts:
+        parts = [fetched_parts[0][1]]
+
     logger.info(
         "CamCore member knowledge context built with %d verified excerpt(s)",
-        fetched_excerpts,
+        len(parts),
     )
     body = "\n\n".join(parts)
     return (
