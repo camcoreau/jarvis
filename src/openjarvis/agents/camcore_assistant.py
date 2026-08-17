@@ -81,20 +81,16 @@ def _active_block_guardrails(engine: Any) -> Any | None:
         return None
 
     current = engine
-    seen: set[int] = set()
-    while current is not None and id(current) not in seen:
-        seen.add(id(current))
-        if isinstance(current, GuardrailsEngine):
-            if (
-                getattr(current, "_scan_input", False)
-                and getattr(current, "_mode", None) == RedactionMode.BLOCK
-            ):
-                return current
-            return None
-        if isinstance(current, InstrumentedEngine):
-            current = getattr(current, "_inner", None)
-            continue
-        current = getattr(current, "_inner", None)
+    while isinstance(current, InstrumentedEngine):
+        current = current._inner
+
+    if not isinstance(current, GuardrailsEngine):
+        return None
+    if (
+        getattr(current, "_scan_input", False)
+        and getattr(current, "_mode", None) == RedactionMode.BLOCK
+    ):
+        return current
     return None
 
 
