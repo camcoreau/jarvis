@@ -28,10 +28,7 @@ def _block_security_config():
 
 class _PromptBuilder:
     def build(self):
-        return (
-            "CamCore server persona contact admin@example.com and test host "
-            "192.0.2.44."
-        )
+        return "admin@example.com 192.0.2.44"
 
 
 def _guarded_agent(prompt_builder=None):
@@ -43,20 +40,13 @@ def _guarded_agent(prompt_builder=None):
         "finish_reason": "stop",
     }
     guarded = GuardrailsEngine(underlying, mode=RedactionMode.BLOCK)
-    agent = CamCoreAssistantAgent(
-        guarded,
-        "test-model",
-        prompt_builder=prompt_builder,
-    )
+    agent = CamCoreAssistantAgent(guarded, "test-model", prompt_builder=prompt_builder)
     return agent, underlying
 
 
 def test_server_built_system_prompt_is_redacted_in_block_mode(monkeypatch):
     agent, underlying = _guarded_agent(_PromptBuilder())
-    monkeypatch.setattr(
-        "openjarvis.core.config.load_config",
-        _block_security_config,
-    )
+    monkeypatch.setattr("openjarvis.core.config.load_config", _block_security_config)
 
     result = agent.run("Check CamCore")
 
@@ -71,16 +61,10 @@ def test_server_built_system_prompt_is_redacted_in_block_mode(monkeypatch):
 
 def test_caller_system_message_remains_guardrails_scanned(monkeypatch):
     agent, _ = _guarded_agent()
-    monkeypatch.setattr(
-        "openjarvis.core.config.load_config",
-        _block_security_config,
-    )
+    monkeypatch.setattr("openjarvis.core.config.load_config", _block_security_config)
     context = AgentContext()
     context.conversation.add(
-        Message(
-            role=Role.SYSTEM,
-            content="Caller supplied contact admin@example.com",
-        )
+        Message(role=Role.SYSTEM, content="Caller contact admin@example.com")
     )
 
     with pytest.raises(SecurityBlockError):
