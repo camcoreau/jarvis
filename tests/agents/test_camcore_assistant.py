@@ -129,11 +129,12 @@ class TestCamCoreAssistantAgent:
                 ]
             ),
         )
+        calculator = _FakeMcpTool("calculator", client, "42")
         engine = _make_engine("Current Outline answer")
         agent = CamCoreAssistantAgent(
             engine,
             "test-model",
-            tools=[search, fetch],
+            tools=[search, fetch, calculator],
         )
 
         result = agent.run(
@@ -159,6 +160,10 @@ class TestCamCoreAssistantAgent:
             }
         ]
         assert fetch.calls == [{"resource": "document", "id": "validation-doc"}]
+
+        advertised = engine.generate.call_args.kwargs["tools"]
+        advertised_names = {tool["function"]["name"] for tool in advertised}
+        assert advertised_names == {"calculator"}
 
     def test_operations_prefetch_does_not_trip_block_mode_guardrails(self):
         client = object()
@@ -215,3 +220,66 @@ class TestCamCoreAssistantAgent:
         assert "202-555-0187" not in system_prompt
         assert "4111111111111111" not in system_prompt
         assert "[REDACTED:" in system_prompt
+        assert "tools" not in underlying.generate.call_args.kwargs
+
+    def test_operations_model_cannot_reinvoke_raw_outline_tools(self):
+        client = object()
+        search = _FakeMcpTool(
+            "list_documents",
+            client,
+            json.dumps(
+                {
+                    "document": {"id": "marker-doc", "title": "Marker"},
+                    "context": "CamCore documentation marker: OLD-MARKER",
+                }
+            ),
+        )
+        fetch = _FakeMcpTool(
+            "fetch",
+            client,
+            '{"document":{"id":"marker-doc","title":"Marker"}}\n'
+            "CamCore documentation marker: GREEN-WOMBAT-9642\n"
+            "Contact raw-tool@example.com",
+        )
+        engine = MagicMock()
+        engine.engine_id = "mock"
+        engine.generate.side_effect = [
+            {
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call-outline",
+                        "name": "list_documents",
+                        "arguments": json.dumps({"query": "marker", "limit": 5}),
+                    }
+                ],
+                "usage": {},
+                "finish_reason": "tool_calls",
+            },
+            {
+                "content": "Safe final answer",
+                "tool_calls": [],
+                "usage": {},
+                "finish_reason": "stop",
+            },
+        ]
+        agent = CamCoreAssistantAgent(
+            engine,
+            "test-model",
+            tools=[search, fetch],
+        )
+
+        result = agent.run("What is the CamCore documentation marker?")
+
+        assert result.content == "Safe final answer"
+        assert search.calls == [
+            {"query": "What is the CamCore documentation marker?", "limit": 5}
+        ]
+        assert fetch.calls == [{"resource": "document", "id": "marker-doc"}]
+        assert result.tool_results[0].success is False
+        assert result.tool_results[0].content == "Unknown tool: list_documents"
+        second_messages = engine.generate.call_args_list[1].args[0]
+        tool_messages = [message for message in second_messages if message.role == Role.TOOL]
+        assert len(tool_messages) == 1
+        assert tool_messages[0].content == "Unknown tool: list_documents"
+        assert "raw-tool@example.com" not in tool_messages[0].content
