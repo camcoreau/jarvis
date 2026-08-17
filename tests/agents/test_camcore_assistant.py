@@ -45,6 +45,16 @@ class _FakeMcpTool:
             success=True,
         )
 
+    def to_openai_function(self):
+        return {
+            "type": "function",
+            "function": {
+                "name": self.spec.name,
+                "description": self.spec.description,
+                "parameters": self.spec.parameters,
+            },
+        }
+
 
 class TestCamCoreAssistantAgent:
     def test_registered(self):
