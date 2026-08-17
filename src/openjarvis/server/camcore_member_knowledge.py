@@ -29,6 +29,7 @@ _MAX_FETCHED_DOCUMENTS = 2
 _MAX_SEARCH_CONTEXT_CHARS = 4_000
 _MAX_DOCUMENT_EXCERPT_CHARS = 5_000
 _MAX_CONTEXT_CHARS = 10_000
+_MAX_FOCUSED_TERMS = 6
 
 _STOP_WORDS = {
     "about",
@@ -117,6 +118,22 @@ def _query_terms(query: str) -> set[str]:
         for token in re.findall(r"[a-z0-9][a-z0-9_-]{2,}", query.lower())
         if token not in _STOP_WORDS
     }
+
+
+def _focused_query(query: str) -> str:
+    """Reduce conversational wording to salient terms for Outline full-text search."""
+
+    focused: list[str] = []
+    seen: set[str] = set()
+    for token in re.findall(r"[A-Za-z0-9][A-Za-z0-9_-]{2,}", query):
+        lowered = token.lower()
+        if lowered in _STOP_WORDS or lowered in seen:
+            continue
+        focused.append(token)
+        seen.add(lowered)
+        if len(focused) >= _MAX_FOCUSED_TERMS:
+            break
+    return " ".join(focused)
 
 
 def _redact_member_knowledge(text: str) -> str:
@@ -248,6 +265,24 @@ def _relevant_excerpt(raw: str, query: str) -> str:
     return "\n".join(excerpt_lines)[:_MAX_DOCUMENT_EXCERPT_CHARS]
 
 
+def _run_search(list_tool: Any, search_query: str) -> str | None:
+    """Run one Outline search without logging user or document content."""
+
+    try:
+        result = list_tool.execute(
+            query=search_query[:_MAX_QUERY_CHARS],
+            limit=_MAX_SEARCH_RESULTS,
+        )
+    except Exception:
+        logger.warning("CamCore member knowledge search failed", exc_info=True)
+        return None
+
+    if not getattr(result, "success", False):
+        logger.warning("CamCore member knowledge search returned an error")
+        return None
+    return str(getattr(result, "content", "") or "")
+
+
 def build_member_knowledge_context(agent: Any, query: str) -> str:
     """Build a bounded, read-only Outline context block for member chat.
 
@@ -264,48 +299,63 @@ def build_member_knowledge_context(agent: Any, query: str) -> str:
     list_tool = tools.get("list_documents")
     fetch_tool = tools.get("fetch")
     if list_tool is None or fetch_tool is None:
+        logger.info("CamCore member knowledge tools unavailable")
         return ""
 
-    try:
-        search_result = list_tool.execute(
-            query=query[:_MAX_QUERY_CHARS],
-            limit=_MAX_SEARCH_RESULTS,
-        )
-    except Exception:
-        logger.warning("CamCore member knowledge search failed", exc_info=True)
+    raw_search = _run_search(list_tool, query)
+    if raw_search is None:
         return ""
 
-    if not getattr(search_result, "success", False):
-        logger.warning("CamCore member knowledge search returned an error")
-        return ""
+    document_ids = _document_ids(raw_search)
+    search_summary = _search_summary(raw_search)
 
-    raw_search = str(getattr(search_result, "content", "") or "")
-    if not raw_search:
-        return ""
+    if not document_ids and not search_summary:
+        focused_query = _focused_query(query)
+        if focused_query and focused_query.casefold() != query.casefold():
+            logger.info("CamCore member knowledge retrying focused Outline search")
+            focused_search = _run_search(list_tool, focused_query)
+            if focused_search is not None:
+                focused_ids = _document_ids(focused_search)
+                focused_summary = _search_summary(focused_search)
+                if focused_ids or focused_summary:
+                    raw_search = focused_search
+                    document_ids = focused_ids
+                    search_summary = focused_summary
+
+    logger.info(
+        "CamCore member knowledge search completed with %d document match(es)",
+        len(document_ids),
+    )
 
     parts: list[str] = []
-    safe_search = _redact_member_knowledge(_search_summary(raw_search))[
-        :_MAX_SEARCH_CONTEXT_CHARS
-    ]
+    safe_search = _redact_member_knowledge(search_summary)[:_MAX_SEARCH_CONTEXT_CHARS]
     if safe_search:
         parts.append(f"Outline search matches:\n{safe_search}")
 
-    for document_id in _document_ids(raw_search)[:_MAX_FETCHED_DOCUMENTS]:
+    fetched_excerpts = 0
+    for document_id in document_ids[:_MAX_FETCHED_DOCUMENTS]:
         try:
             result = fetch_tool.execute(resource="document", id=document_id)
         except Exception:
             logger.warning("CamCore member knowledge fetch failed", exc_info=True)
             continue
         if not getattr(result, "success", False):
+            logger.warning("CamCore member knowledge fetch returned an error")
             continue
         raw_document = str(getattr(result, "content", "") or "")
         excerpt = _redact_member_knowledge(_relevant_excerpt(raw_document, query))
         if excerpt:
             parts.append(f"Verified document excerpt:\n{excerpt}")
+            fetched_excerpts += 1
 
     if not parts:
+        logger.info("CamCore member knowledge returned no usable documentation")
         return ""
 
+    logger.info(
+        "CamCore member knowledge context built with %d verified excerpt(s)",
+        fetched_excerpts,
+    )
     body = "\n\n".join(parts)
     return (
         "APPROVED CAMCORE MEMBER KNOWLEDGE\n"
