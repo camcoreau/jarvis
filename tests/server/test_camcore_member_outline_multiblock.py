@@ -84,7 +84,7 @@ def test_member_knowledge_parses_outline_multi_text_block_search_results():
     assert "docs.camcore.network" not in context
     assert list_tool.calls == [
         {"query": "What is Earth in CamCore?", "limit": 5},
-        {"query": "Earth", "limit": 5},
+        {"query": "Earth CamCore", "limit": 5},
     ]
     assert fetch_tool.calls[0] == {"resource": "document", "id": "doc-earth"}
 
@@ -102,6 +102,6 @@ def test_member_knowledge_handles_outline_zero_result_array():
     assert context == ""
     assert list_tool.calls == [
         {"query": "What is Earth in CamCore?", "limit": 5},
-        {"query": "Earth", "limit": 5},
+        {"query": "Earth CamCore", "limit": 5},
     ]
     assert fetch_tool.calls == []
