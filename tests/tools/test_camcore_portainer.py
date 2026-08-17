@@ -6,7 +6,7 @@ import json
 import os
 from unittest.mock import MagicMock, patch
 
-import openjarvis.tools.camcore_portainer as portainer
+from openjarvis.tools import camcore_portainer as portainer
 
 
 _ENDPOINT = {
