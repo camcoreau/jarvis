@@ -97,7 +97,10 @@ def _guardrail_safe_memory_context(text: str) -> str:
 
         security = load_config().security
     except Exception:
-        logger.debug("Unable to resolve security config for memory context", exc_info=True)
+        logger.debug(
+            "Unable to resolve security config for memory context",
+            exc_info=True,
+        )
         return text
 
     if (
