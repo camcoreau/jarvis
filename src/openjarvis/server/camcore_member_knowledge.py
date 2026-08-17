@@ -158,11 +158,39 @@ def _json_value(raw: str) -> Any | None:
         return None
 
 
+def _json_payloads(raw: str) -> list[Any]:
+    """Parse Outline MCP text output as JSON or newline-delimited JSON.
+
+    Outline's ``success`` helper emits one MCP text block per array item. The
+    OpenJarvis MCP adapter joins multiple text blocks with newlines, so a
+    multi-result ``list_documents`` call arrives here as NDJSON rather than one
+    JSON array. Zero results still arrive as ``[]``.
+    """
+
+    raw = (raw or "").strip()
+    if not raw:
+        return []
+
+    payload = _json_value(raw)
+    if payload is not None:
+        return [payload]
+
+    payloads: list[Any] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        value = _json_value(line)
+        if value is not None:
+            payloads.append(value)
+    return payloads
+
+
 def _document_ids(raw: str) -> list[str]:
     """Extract document IDs from Outline ``list_documents`` JSON output."""
 
-    payload = _json_value(raw)
-    if payload is None:
+    payloads = _json_payloads(raw)
+    if not payloads:
         return []
 
     ids: list[str] = []
@@ -184,15 +212,16 @@ def _document_ids(raw: str) -> list[str]:
             for child in value:
                 walk(child)
 
-    walk(payload)
+    for payload in payloads:
+        walk(payload)
     return ids
 
 
 def _search_summary(raw: str) -> str:
     """Expose only titles/search context, never Outline IDs or internal URLs."""
 
-    payload = _json_value(raw)
-    if payload is None:
+    payloads = _json_payloads(raw)
+    if not payloads:
         return ""
 
     matches: list[str] = []
@@ -215,7 +244,8 @@ def _search_summary(raw: str) -> str:
             for child in value:
                 walk(child)
 
-    walk(payload)
+    for payload in payloads:
+        walk(payload)
     return "\n\n".join(matches[:_MAX_SEARCH_RESULTS])
 
 
