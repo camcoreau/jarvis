@@ -1,10 +1,8 @@
-"""CamCore Portainer tools for live Docker estate inspection and control.
+"""CamCore Portainer tools for live Docker inspection and control.
 
-The model never receives Portainer credentials or an arbitrary request URL.  Every
-request is built from the operator-configured Portainer base URL and logical
-Portainer environment/container identifiers.  Read tools intentionally return a
-small allow-listed view of Docker state rather than raw inspect payloads, which
-can contain environment variables and other secrets.
+Credentials and arbitrary request targets never enter the model tool schema.
+Read tools return an allow-listed view of Docker state instead of raw inspect
+payloads, which can contain environment variables and other secrets.
 """
 
 from __future__ import annotations
@@ -22,6 +20,7 @@ from openjarvis.tools._stubs import BaseTool, ToolSpec
 _DEFAULT_TIMEOUT = 15.0
 _MAX_LOG_CHARS = 50_000
 _MAX_TAIL = 500
+_REDACTION_FAILURE = "[sensitive operational content omitted: redaction unavailable]"
 
 
 class _PortainerConfigError(RuntimeError):
@@ -40,26 +39,29 @@ def _env_bool(name: str, default: bool = True) -> bool:
 
 
 def _redact_sensitive(text: str) -> str:
-    """Redact secrets/PII before operational data is placed back in model context."""
+    """Redact secrets and PII before text reaches model context."""
     try:
         from openjarvis.security.scanner import PIIScanner, SecretScanner
 
         text = SecretScanner().redact(text)
-        text = PIIScanner().redact(text)
+        return PIIScanner().redact(text)
     except Exception:
-        # Guardrails still scan the subsequent model turn.  Failure to construct a
-        # scanner must never make the Portainer connector itself unavailable.
-        pass
-    return text
+        return _REDACTION_FAILURE
 
 
 def _safe_error(exc: Exception) -> str:
+    if isinstance(exc, _PortainerConfigError):
+        return str(exc)[:2_000]
     return _redact_sensitive(str(exc))[:2_000]
 
 
 class _PortainerClient:
+    """Small fixed-target client for the configured Portainer API origin."""
+
     def __init__(self) -> None:
-        self.base_url = os.environ.get("CAMCORE_PORTAINER_URL", "").strip().rstrip("/")
+        self.base_url = (
+            os.environ.get("CAMCORE_PORTAINER_URL", "").strip().rstrip("/")
+        )
         self.api_key = os.environ.get("CAMCORE_PORTAINER_API_KEY", "").strip()
         self.verify_tls = _env_bool("CAMCORE_PORTAINER_VERIFY_TLS", True)
 
@@ -99,7 +101,9 @@ class _PortainerClient:
                 follow_redirects=False,
             )
         except httpx.RequestError as exc:
-            raise _PortainerRequestError(f"Portainer request failed: {exc}") from exc
+            raise _PortainerRequestError(
+                f"Portainer request failed: {_redact_sensitive(str(exc))}"
+            ) from exc
 
         if response.is_redirect:
             raise _PortainerRequestError(
@@ -137,8 +141,14 @@ def _endpoint_name(endpoint: dict[str, Any]) -> str:
 def _list_endpoints(client: _PortainerClient) -> list[dict[str, Any]]:
     data = client.json("GET", "endpoints")
     if not isinstance(data, list):
-        raise _PortainerRequestError("Portainer environment list had an invalid shape.")
-    return [item for item in data if isinstance(item, dict) and item.get("Id") is not None]
+        raise _PortainerRequestError(
+            "Portainer environment list had an invalid shape."
+        )
+    return [
+        item
+        for item in data
+        if isinstance(item, dict) and item.get("Id") is not None
+    ]
 
 
 def _resolve_endpoint(
@@ -166,7 +176,8 @@ def _resolve_endpoint(
     if not matches:
         available = ", ".join(sorted(_endpoint_name(item) for item in endpoints))
         raise _PortainerRequestError(
-            f"Unknown Portainer environment '{wanted}'. Available: {available or 'none'}."
+            f"Unknown Portainer environment '{wanted}'. "
+            f"Available: {available or 'none'}."
         )
     names = ", ".join(sorted(_endpoint_name(item) for item in matches))
     raise _PortainerRequestError(
@@ -248,14 +259,20 @@ def _find_container(
 
     for endpoint in endpoints:
         endpoint_id = int(endpoint["Id"])
-        for container in _list_containers(client, endpoint_id, include_stopped=True):
+        containers = _list_containers(
+            client,
+            endpoint_id,
+            include_stopped=True,
+        )
+        for container in containers:
             container_id = str(container.get("Id") or "")
             names = _container_names(container)
-            if (
-                wanted_folded in {name.casefold() for name in names}
-                or container_id.casefold() == wanted_folded
-                or container_id.casefold().startswith(wanted_folded)
-            ):
+            name_match = wanted_folded in {
+                name.casefold() for name in names
+            }
+            id_match = container_id.casefold() == wanted_folded
+            prefix_match = container_id.casefold().startswith(wanted_folded)
+            if name_match or id_match or prefix_match:
                 matches.append((endpoint, container))
 
     if len(matches) == 1:
@@ -266,7 +283,9 @@ def _find_container(
             if environment is not None and str(environment).strip()
             else ""
         )
-        raise _PortainerRequestError(f"Container '{wanted}' was not found{scope}.")
+        raise _PortainerRequestError(
+            f"Container '{wanted}' was not found{scope}."
+        )
 
     labels = ", ".join(
         f"{_endpoint_name(endpoint)}/{_primary_container_name(container)}"
@@ -330,7 +349,12 @@ def _decode_docker_log_stream(content: bytes) -> str:
     """Decode Docker multiplexed log frames, falling back to plain UTF-8."""
     if not content:
         return ""
-    if len(content) < 8 or content[0] not in (0, 1, 2) or content[1:4] != b"\x00\x00\x00":
+    multiplexed = (
+        len(content) >= 8
+        and content[0] in (0, 1, 2)
+        and content[1:4] == b"\x00\x00\x00"
+    )
+    if not multiplexed:
         return content.decode("utf-8", errors="replace")
 
     chunks: list[bytes] = []
@@ -350,7 +374,7 @@ def _decode_docker_log_stream(content: bytes) -> str:
 
 @ToolRegistry.register("camcore_portainer_overview")
 class CamCorePortainerOverviewTool(BaseTool):
-    """Return a safe live overview of Portainer environments and containers."""
+    """Return a safe live overview of environments and containers."""
 
     tool_id = "camcore_portainer_overview"
     is_local = False
@@ -360,16 +384,18 @@ class CamCorePortainerOverviewTool(BaseTool):
         return ToolSpec(
             name=self.tool_id,
             description=(
-                "Read live CamCore Docker state through Portainer. Lists Portainer "
-                "environments and a safe summary of their containers without "
-                "returning container environment variables or labels."
+                "Read live CamCore Docker state through Portainer. List "
+                "environments and safe container summaries without container "
+                "environment variables or labels."
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "include_stopped": {
                         "type": "boolean",
-                        "description": "Include stopped containers. Defaults to true.",
+                        "description": (
+                            "Include stopped containers. Defaults to true."
+                        ),
                     }
                 },
             },
@@ -395,13 +421,20 @@ class CamCorePortainerOverviewTool(BaseTool):
                         int(endpoint["Id"]),
                         include_stopped=include_stopped,
                     )
-                    summaries = [_container_summary(container) for container in containers]
+                    summaries = [
+                        _container_summary(container)
+                        for container in containers
+                    ]
                     item["container_count"] = len(summaries)
                     item["running"] = sum(
-                        1 for value in summaries if value["state"] == "running"
+                        1
+                        for value in summaries
+                        if value["state"] == "running"
                     )
                     item["unhealthy"] = sum(
-                        1 for value in summaries if value.get("health") == "unhealthy"
+                        1
+                        for value in summaries
+                        if value.get("health") == "unhealthy"
                     )
                     item["containers"] = sorted(
                         summaries,
@@ -410,6 +443,7 @@ class CamCorePortainerOverviewTool(BaseTool):
                 except Exception as exc:
                     item["error"] = _safe_error(exc)
                 environments.append(item)
+
             payload = {
                 "source": "Portainer live API",
                 "environment_count": len(environments),
@@ -430,7 +464,7 @@ class CamCorePortainerOverviewTool(BaseTool):
 
 @ToolRegistry.register("camcore_portainer_container_status")
 class CamCorePortainerContainerStatusTool(BaseTool):
-    """Inspect one container and return allow-listed live state and resource usage."""
+    """Read allow-listed state and resource use for one container."""
 
     tool_id = "camcore_portainer_container_status"
     is_local = False
@@ -440,8 +474,9 @@ class CamCorePortainerContainerStatusTool(BaseTool):
         return ToolSpec(
             name=self.tool_id,
             description=(
-                "Read live status, health, restart count, safe network/mount metadata, "
-                "CPU, memory and network usage for a CamCore container through Portainer."
+                "Read live status, health, restart count, safe network and "
+                "mount metadata, CPU, memory, and network usage for a CamCore "
+                "container through Portainer."
             ),
             parameters={
                 "type": "object",
@@ -453,8 +488,8 @@ class CamCorePortainerContainerStatusTool(BaseTool):
                     "environment": {
                         "type": "string",
                         "description": (
-                            "Optional Portainer environment name or ID. Omit when the "
-                            "container name is unique across CamCore."
+                            "Optional Portainer environment name or ID. Omit "
+                            "when the container name is unique across CamCore."
                         ),
                     },
                 },
@@ -484,13 +519,21 @@ class CamCorePortainerContainerStatusTool(BaseTool):
                 params={"stream": "false"},
             )
             if not isinstance(inspect, dict) or not isinstance(stats, dict):
-                raise _PortainerRequestError("Docker inspect/stats response was invalid.")
+                raise _PortainerRequestError(
+                    "Docker inspect/stats response was invalid."
+                )
 
             state = inspect.get("State") or {}
             health = state.get("Health") or {}
             config = inspect.get("Config") or {}
-            networks = (inspect.get("NetworkSettings") or {}).get("Networks") or {}
+            network_settings = inspect.get("NetworkSettings") or {}
+            networks = network_settings.get("Networks") or {}
             mounts = inspect.get("Mounts") or []
+            network_names = (
+                sorted(networks.keys())
+                if isinstance(networks, dict)
+                else []
+            )
             payload: dict[str, Any] = {
                 "source": "Portainer live API",
                 "environment": _endpoint_name(endpoint),
@@ -510,7 +553,7 @@ class CamCorePortainerContainerStatusTool(BaseTool):
                     "health": health.get("Status"),
                 },
                 "restart_count": inspect.get("RestartCount"),
-                "networks": sorted(networks.keys()) if isinstance(networks, dict) else [],
+                "networks": network_names,
                 "mount_destinations": sorted(
                     str(item.get("Destination"))
                     for item in mounts
@@ -545,8 +588,9 @@ class CamCorePortainerContainerLogsTool(BaseTool):
         return ToolSpec(
             name=self.tool_id,
             description=(
-                "Read recent stdout/stderr from a CamCore container through Portainer. "
-                "Secrets and PII are redacted before logs are returned to the model."
+                "Read recent stdout/stderr from a CamCore container through "
+                "Portainer. Secrets and PII are redacted before logs are "
+                "returned to the model."
             ),
             parameters={
                 "type": "object",
@@ -557,13 +601,17 @@ class CamCorePortainerContainerLogsTool(BaseTool):
                     },
                     "environment": {
                         "type": "string",
-                        "description": "Optional Portainer environment name or ID.",
+                        "description": (
+                            "Optional Portainer environment name or ID."
+                        ),
                     },
                     "tail": {
                         "type": "integer",
                         "minimum": 1,
                         "maximum": _MAX_TAIL,
-                        "description": "Number of recent log lines to request (max 500).",
+                        "description": (
+                            "Number of recent log lines to request (max 500)."
+                        ),
                     },
                 },
                 "required": ["container"],
@@ -578,6 +626,7 @@ class CamCorePortainerContainerLogsTool(BaseTool):
         except (TypeError, ValueError):
             tail = 100
         tail = max(1, min(tail, _MAX_TAIL))
+
         client = _PortainerClient()
         try:
             endpoint, container = _find_container(
@@ -597,7 +646,8 @@ class CamCorePortainerContainerLogsTool(BaseTool):
                     "tail": str(tail),
                 },
             )
-            text = _redact_sensitive(_decode_docker_log_stream(response.content))
+            decoded = _decode_docker_log_stream(response.content)
+            text = _redact_sensitive(decoded)
             truncated = len(text) > _MAX_LOG_CHARS
             if truncated:
                 text = text[:_MAX_LOG_CHARS] + "\n[logs truncated]"
@@ -609,7 +659,11 @@ class CamCorePortainerContainerLogsTool(BaseTool):
                 tool_name=self.tool_id,
                 content=header + (text or "(no log output)"),
                 success=True,
-                metadata={"tail": tail, "truncated": truncated, "redacted": True},
+                metadata={
+                    "tail": tail,
+                    "truncated": truncated,
+                    "redacted": True,
+                },
             )
         except Exception as exc:
             return ToolResult(
@@ -621,7 +675,7 @@ class CamCorePortainerContainerLogsTool(BaseTool):
 
 @ToolRegistry.register("camcore_portainer_container_action")
 class CamCorePortainerContainerActionTool(BaseTool):
-    """Start, stop or restart a container after explicit user confirmation."""
+    """Start, stop, or restart a container after explicit confirmation."""
 
     tool_id = "camcore_portainer_container_action"
     is_local = False
@@ -631,8 +685,9 @@ class CamCorePortainerContainerActionTool(BaseTool):
         return ToolSpec(
             name=self.tool_id,
             description=(
-                "Start, stop or restart a CamCore container through Portainer. This is "
-                "a modifying action and always requires explicit confirmation."
+                "Start, stop, or restart a CamCore container through "
+                "Portainer. This modifies live state and always requires "
+                "explicit confirmation."
             ),
             parameters={
                 "type": "object",
@@ -643,7 +698,9 @@ class CamCorePortainerContainerActionTool(BaseTool):
                     },
                     "environment": {
                         "type": "string",
-                        "description": "Optional Portainer environment name or ID.",
+                        "description": (
+                            "Optional Portainer environment name or ID."
+                        ),
                     },
                     "action": {
                         "type": "string",
@@ -654,7 +711,10 @@ class CamCorePortainerContainerActionTool(BaseTool):
                         "type": "integer",
                         "minimum": 1,
                         "maximum": 60,
-                        "description": "Stop/restart grace period in seconds. Defaults to 10.",
+                        "description": (
+                            "Stop/restart grace period in seconds. "
+                            "Defaults to 10."
+                        ),
                     },
                 },
                 "required": ["container", "action"],
@@ -669,7 +729,10 @@ class CamCorePortainerContainerActionTool(BaseTool):
         if action not in {"start", "stop", "restart"}:
             return ToolResult(
                 tool_name=self.tool_id,
-                content="Unsupported action. Allowed actions: start, stop, restart.",
+                content=(
+                    "Unsupported action. Allowed actions: "
+                    "start, stop, restart."
+                ),
                 success=False,
             )
         try:
@@ -687,17 +750,25 @@ class CamCorePortainerContainerActionTool(BaseTool):
             )
             endpoint_id = int(endpoint["Id"])
             container_id = str(container["Id"])
-            request_params = {"t": str(timeout)} if action in {"stop", "restart"} else None
+            request_params = (
+                {"t": str(timeout)}
+                if action in {"stop", "restart"}
+                else None
+            )
             client.request(
                 "POST",
-                f"endpoints/{endpoint_id}/docker/containers/{container_id}/{action}",
+                (
+                    f"endpoints/{endpoint_id}/docker/containers/"
+                    f"{container_id}/{action}"
+                ),
                 params=request_params,
             )
             return ToolResult(
                 tool_name=self.tool_id,
                 content=(
                     f"Portainer accepted '{action}' for "
-                    f"{_endpoint_name(endpoint)}/{_primary_container_name(container)}."
+                    f"{_endpoint_name(endpoint)}/"
+                    f"{_primary_container_name(container)}."
                 ),
                 success=True,
             )
