@@ -30,8 +30,9 @@ _MAX_DOCUMENT_EXCERPT_CHARS = 5_000
 _MAX_CONTEXT_CHARS = 10_000
 _MAX_FOCUSED_TERMS = 6
 
-# These words are intentionally excluded from excerpt relevance. They describe
-# the knowledge source rather than the subject the user is asking about.
+# These words are intentionally excluded from excerpt relevance and the
+# traditional zero-result focused fallback. They describe the knowledge source
+# rather than the subject the user is asking about.
 _STOP_WORDS = {
     "about",
     "according",
@@ -74,10 +75,9 @@ _STOP_WORDS = {
     "your",
 }
 
-# Focused Outline search is phrase-aware. Keep CamCore/source vocabulary here
-# because phrases such as "CamCore documentation marker" are materially more
-# selective than the single word "marker". Only conversational scaffolding is
-# removed.
+# Phrase-aware search intentionally keeps CamCore/source vocabulary. Phrases
+# such as "CamCore documentation marker" are materially more selective than the
+# single word "marker". Only conversational scaffolding is removed.
 _SEARCH_STOP_WORDS = {
     "about",
     "according",
@@ -172,7 +172,23 @@ def _query_terms(query: str) -> set[str]:
 
 
 def _focused_query(query: str) -> str:
-    """Reduce conversational wording to a phrase-aware Outline search query."""
+    """Reduce a missed broad query to only its distinctive subject terms."""
+
+    focused: list[str] = []
+    seen: set[str] = set()
+    for token in _tokens(query):
+        lowered = token.lower()
+        if lowered in _STOP_WORDS or lowered in seen:
+            continue
+        focused.append(token)
+        seen.add(lowered)
+        if len(focused) >= _MAX_FOCUSED_TERMS:
+            break
+    return " ".join(focused)
+
+
+def _phrase_query(query: str) -> str:
+    """Build a phrase-aware search for ambiguous broad Outline results."""
 
     focused: list[str] = []
     seen: set[str] = set()
@@ -336,8 +352,6 @@ def _candidate_score(candidate: dict[str, str], query: str) -> int:
     if phrase and phrase in haystack:
         score += 200
 
-    # Adjacent term pairs strongly distinguish e.g. "documentation marker"
-    # from unrelated support-email text that happens to contain "marker".
     for left, right in zip(terms, terms[1:]):
         if f"{left} {right}" in haystack:
             score += 40
@@ -378,7 +392,6 @@ def _ranked_document_ids(query: str, *search_outputs: str) -> list[str]:
             if existing is None:
                 candidates[document_id] = candidate
                 continue
-            # Preserve whichever search returned richer discovery text.
             if len(candidate["title"] + candidate["context"]) > len(
                 existing["title"] + existing["context"]
             ):
@@ -516,15 +529,21 @@ def build_member_knowledge_context(agent: Any, query: str) -> str:
 
     search_outputs = [raw_search]
     broad_ids = _document_ids(raw_search)
-    focused_query = _focused_query(query)
-    if focused_query and focused_query.casefold() != query.casefold():
-        # Always run one phrase-aware focused search. A single broad result can
-        # still be the wrong document, and the total search/fetch bounds remain
-        # fixed and small.
-        logger.info("CamCore member knowledge retrying focused Outline search")
-        focused_search = _run_search(list_tool, focused_query)
-        if focused_search is not None:
-            search_outputs.append(focused_search)
+
+    if len(broad_ids) > 1:
+        phrase_query = _phrase_query(query)
+        if phrase_query and phrase_query.casefold() != query.casefold():
+            logger.info("CamCore member knowledge retrying phrase-aware Outline search")
+            phrase_search = _run_search(list_tool, phrase_query)
+            if phrase_search is not None:
+                search_outputs.append(phrase_search)
+    elif not broad_ids:
+        focused_query = _focused_query(query)
+        if focused_query and focused_query.casefold() != query.casefold():
+            logger.info("CamCore member knowledge retrying focused Outline search")
+            focused_search = _run_search(list_tool, focused_query)
+            if focused_search is not None:
+                search_outputs.append(focused_search)
 
     document_ids = _ranked_document_ids(query, *search_outputs)
     if not document_ids:
