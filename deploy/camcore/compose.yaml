@@ -73,6 +73,11 @@ services:
       OPENJARVIS_CONFIG: /etc/openjarvis/camcore-config.toml
       OPENJARVIS_API_KEY: ${OPENJARVIS_API_KEY:?Set OPENJARVIS_API_KEY before deployment}
       CAMCORE_OUTLINE_API_KEY: ${CAMCORE_OUTLINE_API_KEY:?Set CAMCORE_OUTLINE_API_KEY before deployment}
+      # Live CamCore Docker control plane. Keep the API key only in Portainer's
+      # stack environment; the model receives logical environment/container names.
+      CAMCORE_PORTAINER_URL: ${CAMCORE_PORTAINER_URL:-}
+      CAMCORE_PORTAINER_API_KEY: ${CAMCORE_PORTAINER_API_KEY:-}
+      CAMCORE_PORTAINER_VERIFY_TLS: ${CAMCORE_PORTAINER_VERIFY_TLS:-true}
       # Optional OpenAI hybrid provider. Keep the real key only in Portainer.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       CAMCORE_OPENAI_MODEL: ${CAMCORE_OPENAI_MODEL:-gpt-5.6}
