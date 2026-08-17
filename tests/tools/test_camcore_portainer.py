@@ -6,17 +6,15 @@ import json
 import os
 from unittest.mock import MagicMock, patch
 
-from openjarvis.tools.camcore_portainer import (
-    CamCorePortainerContainerActionTool,
-    CamCorePortainerContainerLogsTool,
-    CamCorePortainerContainerStatusTool,
-    CamCorePortainerOverviewTool,
-    _PortainerClient,
-    _decode_docker_log_stream,
-)
+import openjarvis.tools.camcore_portainer as portainer
 
 
-_ENDPOINT = {"Id": 2, "Name": "ganymede", "Status": 1, "URL": "tcp://secret:9001"}
+_ENDPOINT = {
+    "Id": 2,
+    "Name": "ganymede",
+    "Status": 1,
+    "URL": "tcp://secret:9001",
+}
 _CONTAINER = {
     "Id": "abcdef1234567890",
     "Names": ["/camcore-status"],
@@ -34,7 +32,10 @@ def _inspect_payload() -> dict:
         "RestartCount": 1,
         "Config": {
             "Image": _CONTAINER["Image"],
-            "Env": ["API_KEY=must-not-return", "PASSWORD=must-not-return"],
+            "Env": [
+                "API_KEY=must-not-return",
+                "PASSWORD=must-not-return",
+            ],
             "Labels": {"secret": "must-not-return"},
         },
         "State": {
@@ -47,7 +48,10 @@ def _inspect_payload() -> dict:
             "ExitCode": 0,
             "StartedAt": "2026-08-17T12:00:00Z",
             "FinishedAt": "0001-01-01T00:00:00Z",
-            "Health": {"Status": "healthy", "Log": [{"Output": "secret"}]},
+            "Health": {
+                "Status": "healthy",
+                "Log": [{"Output": "secret"}],
+            },
         },
         "NetworkSettings": {
             "Networks": {
@@ -56,7 +60,10 @@ def _inspect_payload() -> dict:
             }
         },
         "Mounts": [
-            {"Source": "/volume2/private/source", "Destination": "/data"},
+            {
+                "Source": "/volume2/private/source",
+                "Destination": "/data",
+            },
         ],
     }
 
@@ -64,7 +71,10 @@ def _inspect_payload() -> dict:
 def _stats_payload() -> dict:
     return {
         "cpu_stats": {
-            "cpu_usage": {"total_usage": 300, "percpu_usage": [1, 1]},
+            "cpu_usage": {
+                "total_usage": 300,
+                "percpu_usage": [1, 1],
+            },
             "system_cpu_usage": 2_000,
             "online_cpus": 2,
         },
@@ -72,21 +82,30 @@ def _stats_payload() -> dict:
             "cpu_usage": {"total_usage": 100},
             "system_cpu_usage": 1_000,
         },
-        "memory_stats": {"usage": 104_857_600, "limit": 536_870_912},
+        "memory_stats": {
+            "usage": 104_857_600,
+            "limit": 536_870_912,
+        },
         "networks": {
-            "eth0": {"rx_bytes": 1_048_576, "tx_bytes": 2_097_152},
+            "eth0": {
+                "rx_bytes": 1_048_576,
+                "tx_bytes": 2_097_152,
+            },
         },
     }
 
 
 class TestCamCorePortainerSpecs:
     def test_read_tools_are_not_confirmation_gated(self):
-        assert CamCorePortainerOverviewTool().spec.requires_confirmation is False
-        assert CamCorePortainerContainerStatusTool().spec.requires_confirmation is False
-        assert CamCorePortainerContainerLogsTool().spec.requires_confirmation is False
+        overview = portainer.CamCorePortainerOverviewTool()
+        status = portainer.CamCorePortainerContainerStatusTool()
+        logs = portainer.CamCorePortainerContainerLogsTool()
+        assert overview.spec.requires_confirmation is False
+        assert status.spec.requires_confirmation is False
+        assert logs.spec.requires_confirmation is False
 
     def test_mutation_tool_requires_confirmation_and_system_admin(self):
-        spec = CamCorePortainerContainerActionTool().spec
+        spec = portainer.CamCorePortainerContainerActionTool().spec
         assert spec.requires_confirmation is True
         assert "system:admin" in spec.required_capabilities
         assert spec.parameters["properties"]["action"]["enum"] == [
@@ -96,37 +115,52 @@ class TestCamCorePortainerSpecs:
         ]
 
     def test_tools_do_not_accept_arbitrary_urls_or_headers(self):
-        for tool in (
-            CamCorePortainerOverviewTool(),
-            CamCorePortainerContainerStatusTool(),
-            CamCorePortainerContainerLogsTool(),
-            CamCorePortainerContainerActionTool(),
-        ):
+        tools = (
+            portainer.CamCorePortainerOverviewTool(),
+            portainer.CamCorePortainerContainerStatusTool(),
+            portainer.CamCorePortainerContainerLogsTool(),
+            portainer.CamCorePortainerContainerActionTool(),
+        )
+        for tool in tools:
             properties = tool.spec.parameters.get("properties", {})
             assert "url" not in properties
             assert "headers" not in properties
             assert "api_key" not in properties
 
 
+class TestCamCorePortainerRedaction:
+    def test_redaction_failure_fails_closed(self):
+        with patch(
+            "openjarvis.security.scanner.SecretScanner",
+            side_effect=RuntimeError("scanner unavailable"),
+        ):
+            result = portainer._redact_sensitive("API_KEY=must-not-return")
+        assert result == portainer._REDACTION_FAILURE
+        assert "must-not-return" not in result
+
+
 class TestCamCorePortainerOverview:
     def test_missing_server_side_configuration_is_explicit(self):
         with patch.dict(
             os.environ,
-            {"CAMCORE_PORTAINER_URL": "", "CAMCORE_PORTAINER_API_KEY": ""},
+            {
+                "CAMCORE_PORTAINER_URL": "",
+                "CAMCORE_PORTAINER_API_KEY": "",
+            },
             clear=False,
         ):
-            result = CamCorePortainerOverviewTool().execute()
+            result = portainer.CamCorePortainerOverviewTool().execute()
         assert result.success is False
         assert "CAMCORE_PORTAINER_URL" in result.content
         assert "CAMCORE_PORTAINER_API_KEY" in result.content
 
     def test_overview_returns_allow_listed_live_container_state(self):
         with patch.object(
-            _PortainerClient,
+            portainer._PortainerClient,
             "json",
             side_effect=[[_ENDPOINT], [_CONTAINER]],
         ):
-            result = CamCorePortainerOverviewTool().execute()
+            result = portainer.CamCorePortainerOverviewTool().execute()
         assert result.success is True
         payload = json.loads(result.content)
         environment = payload["environments"][0]
@@ -139,13 +173,19 @@ class TestCamCorePortainerOverview:
 
 
 class TestCamCorePortainerContainerStatus:
-    def test_status_returns_resource_usage_without_env_labels_or_source_paths(self):
+    def test_status_returns_resource_usage_without_sensitive_fields(self):
+        responses = [
+            [_ENDPOINT],
+            [_CONTAINER],
+            _inspect_payload(),
+            _stats_payload(),
+        ]
         with patch.object(
-            _PortainerClient,
+            portainer._PortainerClient,
             "json",
-            side_effect=[[_ENDPOINT], [_CONTAINER], _inspect_payload(), _stats_payload()],
+            side_effect=responses,
         ):
-            result = CamCorePortainerContainerStatusTool().execute(
+            result = portainer.CamCorePortainerContainerStatusTool().execute(
                 container="camcore-status"
             )
         assert result.success is True
@@ -165,20 +205,28 @@ class TestCamCorePortainerContainerStatus:
 class TestCamCorePortainerLogs:
     def test_logs_are_redacted_before_return_to_model(self):
         response = MagicMock()
-        response.content = b"user=person@example.com API_KEY=THIS-IS-SECRET\n"
+        response.content = (
+            b"user=person@example.com API_KEY=THIS-IS-SECRET\n"
+        )
         with (
             patch.object(
-                _PortainerClient,
+                portainer._PortainerClient,
                 "json",
                 side_effect=[[_ENDPOINT], [_CONTAINER]],
             ),
-            patch.object(_PortainerClient, "request", return_value=response),
+            patch.object(
+                portainer._PortainerClient,
+                "request",
+                return_value=response,
+            ),
             patch(
                 "openjarvis.tools.camcore_portainer._redact_sensitive",
-                return_value="user=[REDACTED] API_KEY=[REDACTED]\n",
+                return_value=(
+                    "user=[REDACTED] API_KEY=[REDACTED]\n"
+                ),
             ),
         ):
-            result = CamCorePortainerContainerLogsTool().execute(
+            result = portainer.CamCorePortainerContainerLogsTool().execute(
                 container="camcore-status",
                 tail=50,
             )
@@ -192,16 +240,25 @@ class TestCamCorePortainerLogs:
         first = b"hello\n"
         second = b"error\n"
         data = (
-            b"\x01\x00\x00\x00" + len(first).to_bytes(4, "big") + first
-            + b"\x02\x00\x00\x00" + len(second).to_bytes(4, "big") + second
+            b"\x01\x00\x00\x00"
+            + len(first).to_bytes(4, "big")
+            + first
+            + b"\x02\x00\x00\x00"
+            + len(second).to_bytes(4, "big")
+            + second
         )
-        assert _decode_docker_log_stream(data) == "hello\nerror\n"
+        assert portainer._decode_docker_log_stream(data) == (
+            "hello\nerror\n"
+        )
 
 
 class TestCamCorePortainerAction:
     def test_unsupported_action_is_rejected_without_api_call(self):
-        with patch.object(_PortainerClient, "request") as request:
-            result = CamCorePortainerContainerActionTool().execute(
+        with patch.object(
+            portainer._PortainerClient,
+            "request",
+        ) as request:
+            result = portainer.CamCorePortainerContainerActionTool().execute(
                 container="camcore-status",
                 action="delete",
             )
@@ -212,13 +269,16 @@ class TestCamCorePortainerAction:
     def test_restart_uses_portainer_docker_gateway(self):
         with (
             patch.object(
-                _PortainerClient,
+                portainer._PortainerClient,
                 "json",
                 side_effect=[[_ENDPOINT], [_CONTAINER]],
             ),
-            patch.object(_PortainerClient, "request") as request,
+            patch.object(
+                portainer._PortainerClient,
+                "request",
+            ) as request,
         ):
-            result = CamCorePortainerContainerActionTool().execute(
+            result = portainer.CamCorePortainerContainerActionTool().execute(
                 container="camcore-status",
                 action="restart",
                 timeout=15,
