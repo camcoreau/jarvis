@@ -32,6 +32,9 @@ jobs:
       - name: Ruff check
         run: uv run ruff check src/ tests/
 
+      - name: Ruff format diff (temporary)
+        run: uv run ruff format --diff src/openjarvis/tools/camcore_portainer.py tests/tools/test_camcore_portainer.py || true
+
       - name: Ruff format check
         run: uv run ruff format --check src/ tests/
 
