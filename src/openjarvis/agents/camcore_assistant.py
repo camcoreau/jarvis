@@ -458,6 +458,8 @@ class CamCoreAssistantAgent(OrchestratorAgent):
         if knowledge_context:
             context = _with_operations_outline_context(context, knowledge_context)
 
-        answer_only = bool(knowledge_context) and _is_read_only_documentation_lookup(input)
+        answer_only = bool(
+            knowledge_context
+        ) and _is_read_only_documentation_lookup(input)
         run_agent = _operations_model_view(self, allow_tools=not answer_only)
         return OrchestratorAgent.run(run_agent, input, context=context, **kwargs)
