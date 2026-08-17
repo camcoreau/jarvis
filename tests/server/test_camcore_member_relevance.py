@@ -21,15 +21,33 @@ class _SearchTool:
     def execute(self, **params):
         self.calls.append(params)
         query = params.get("query", "")
-        if query == "marker":
-            content = json.dumps(
-                {
-                    "document": {
-                        "id": "doc-validation",
-                        "title": "Jarvis Member Knowledge Validation",
-                    },
-                    "context": "CamCore documentation marker: GREEN-WOMBAT-9642",
-                }
+        if query == "CamCore documentation marker":
+            content = "\n".join(
+                [
+                    json.dumps(
+                        {
+                            "document": {
+                                "id": "doc-support-marker",
+                                "title": "Support Request Updates",
+                            },
+                            "context": (
+                                "CamCore notification emails contain a marker above "
+                                "which users should reply."
+                            ),
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "document": {
+                                "id": "doc-validation",
+                                "title": "Jarvis Member Knowledge Validation",
+                            },
+                            "context": (
+                                "CamCore documentation marker: GREEN-WOMBAT-9642"
+                            ),
+                        }
+                    ),
+                ]
             )
         else:
             content = "\n".join(
@@ -59,37 +77,35 @@ class _FetchTool:
         self.calls.append(params)
         document_id = params.get("id")
         if document_id == "doc-validation":
-            body = "\n".join(
-                [
-                    json.dumps(
-                        {
-                            "document": {
-                                "id": "doc-validation",
-                                "title": "Jarvis Member Knowledge Validation",
-                            }
-                        }
-                    ),
-                    "CamCore documentation marker: GREEN-WOMBAT-9642",
-                ]
+            title = "Jarvis Member Knowledge Validation"
+            text = "CamCore documentation marker: GREEN-WOMBAT-9642"
+        elif document_id == "doc-support-marker":
+            title = "Support Request Updates"
+            text = (
+                "The CamCore notification email contains a marker. "
+                "Reply above the marker to update the support request."
             )
         else:
-            body = "\n".join(
-                [
-                    json.dumps(
-                        {
-                            "document": {
-                                "id": document_id,
-                                "title": "Operations Runbook",
-                            }
+            title = "Operations Runbook"
+            text = "General CamCore documentation and troubleshooting steps."
+
+        body = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "document": {
+                            "id": document_id,
+                            "title": title,
                         }
-                    ),
-                    "General CamCore documentation and troubleshooting steps.",
-                ]
-            )
+                    }
+                ),
+                text,
+            ]
+        )
         return ToolResult(tool_name="fetch", content=body, success=True)
 
 
-def test_ambiguous_broad_search_prioritises_distinctive_results_before_fetching():
+def test_exact_phrase_evidence_outranks_generic_marker_results():
     client = object()
     search = _SearchTool(client)
     fetch = _FetchTool(client)
@@ -104,10 +120,11 @@ def test_ambiguous_broad_search_prioritises_distinctive_results_before_fetching(
 
     assert search.calls == [
         {"query": query, "limit": 5},
-        {"query": "marker", "limit": 5},
+        {"query": "CamCore documentation marker", "limit": 5},
     ]
     assert fetch.calls[0] == {"resource": "document", "id": "doc-validation"}
     assert len(fetch.calls) <= 2
     assert "GREEN-WOMBAT-9642" in context
     assert "Jarvis Member Knowledge Validation" in context
+    assert "Reply above the marker" not in context
     assert "General CamCore documentation and troubleshooting steps." not in context
