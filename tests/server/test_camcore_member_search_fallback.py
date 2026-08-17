@@ -23,7 +23,7 @@ class _SearchTool:
     def execute(self, **params):
         self.calls.append(params)
         query = params.get("query")
-        if query == "Earth":
+        if query == "Earth CamCore":
             content = json.dumps(
                 [
                     {
@@ -65,8 +65,8 @@ class _Agent:
         self._tools = tools
 
 
-def test_focused_query_removes_conversational_camcore_words():
-    assert _focused_query("What is Earth in CamCore?") == "Earth"
+def test_focused_query_keeps_distinctive_camcore_scope():
+    assert _focused_query("What is Earth in CamCore?") == "Earth CamCore"
 
 
 def test_member_knowledge_retries_with_focused_query_when_full_question_misses():
@@ -79,7 +79,7 @@ def test_member_knowledge_retries_with_focused_query_when_full_question_misses()
 
     assert search.calls == [
         {"query": "What is Earth in CamCore?", "limit": 5},
-        {"query": "Earth", "limit": 5},
+        {"query": "Earth CamCore", "limit": 5},
     ]
     assert fetch.calls == [{"resource": "document", "id": "earth-doc"}]
     assert "APPROVED CAMCORE MEMBER KNOWLEDGE" in context
