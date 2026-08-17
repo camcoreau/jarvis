@@ -13,6 +13,8 @@ from openjarvis.agents.camcore_assistant import (
 )
 from openjarvis.core.registry import AgentRegistry
 from openjarvis.core.types import Role, ToolResult
+from openjarvis.security.guardrails import GuardrailsEngine
+from openjarvis.security.types import RedactionMode
 from openjarvis.tools._stubs import ToolSpec
 
 
@@ -157,3 +159,59 @@ class TestCamCoreAssistantAgent:
             }
         ]
         assert fetch.calls == [{"resource": "document", "id": "validation-doc"}]
+
+    def test_operations_prefetch_does_not_trip_block_mode_guardrails(self):
+        client = object()
+        search = _FakeMcpTool(
+            "list_documents",
+            client,
+            json.dumps(
+                {
+                    "document": {
+                        "id": "marker-doc",
+                        "title": "Jarvis Knowledge Marker",
+                    },
+                    "context": "CamCore documentation marker: OLD-MARKER",
+                }
+            ),
+        )
+        fetch = _FakeMcpTool(
+            "fetch",
+            client,
+            "\n".join(
+                [
+                    json.dumps(
+                        {
+                            "document": {
+                                "id": "marker-doc",
+                                "title": "Jarvis Knowledge Marker",
+                            }
+                        }
+                    ),
+                    "CamCore documentation marker: GREEN-WOMBAT-9642",
+                    "Test support number: 202-555-0187",
+                    "Test payment reference: 4111111111111111",
+                ]
+            ),
+        )
+        underlying = _make_engine("Current Outline marker")
+        guarded = GuardrailsEngine(underlying, mode=RedactionMode.BLOCK)
+        agent = CamCoreAssistantAgent(
+            guarded,
+            "test-model",
+            tools=[search, fetch],
+        )
+
+        result = agent.run(
+            "According to the current CamCore documentation, what is the CamCore "
+            "documentation marker?"
+        )
+
+        assert result.content == "Current Outline marker"
+        messages = underlying.generate.call_args[0][0]
+        system_prompt = messages[0].content
+        assert "GREEN-WOMBAT-9642" in system_prompt
+        assert "OLD-MARKER" not in system_prompt
+        assert "202-555-0187" not in system_prompt
+        assert "4111111111111111" not in system_prompt
+        assert "[REDACTED:" in system_prompt
