@@ -71,6 +71,7 @@ _STOP_WORDS = {
     "you",
     "your",
 }
+_FOCUSED_STOP_WORDS = _STOP_WORDS - {"camcore", "documentation"}
 
 _IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 _PRIVATE_HOST_RE = re.compile(r"\b(?:[a-z0-9-]+\.)+camcore\.network\b", re.IGNORECASE)
@@ -127,20 +128,26 @@ def _query_terms(query: str) -> set[str]:
     }
 
 
-def _focused_query(query: str) -> str:
-    """Reduce conversational wording to salient terms for Outline full-text search."""
+def _focused_terms(query: str) -> list[str]:
+    """Return ordered, distinctive search terms while retaining CamCore nouns."""
 
     focused: list[str] = []
     seen: set[str] = set()
     for token in re.findall(r"[A-Za-z0-9][A-Za-z0-9_-]{2,}", query):
         lowered = token.lower()
-        if lowered in _STOP_WORDS or lowered in seen:
+        if lowered in _FOCUSED_STOP_WORDS or lowered in seen:
             continue
         focused.append(token)
         seen.add(lowered)
         if len(focused) >= _MAX_FOCUSED_TERMS:
             break
-    return " ".join(focused)
+    return focused
+
+
+def _focused_query(query: str) -> str:
+    """Reduce conversational wording to a phrase useful for Outline search."""
+
+    return " ".join(_focused_terms(query))
 
 
 def _redact_member_knowledge(text: str) -> str:
@@ -222,6 +229,114 @@ def _document_ids(raw: str) -> list[str]:
     for payload in payloads:
         walk(payload)
     return ids
+
+
+def _search_candidates(raw: str) -> list[dict[str, str]]:
+    """Extract discovery metadata used only to rank which documents to fetch."""
+
+    candidates: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            document = value.get("document")
+            if isinstance(document, dict):
+                document_id = document.get("id")
+                if (
+                    isinstance(document_id, str)
+                    and document_id
+                    and document_id not in seen
+                ):
+                    title = document.get("title")
+                    context = value.get("context")
+                    candidates.append(
+                        {
+                            "id": document_id,
+                            "title": title if isinstance(title, str) else "",
+                            "context": context if isinstance(context, str) else "",
+                        }
+                    )
+                    seen.add(document_id)
+            for child in value.values():
+                walk(child)
+        elif isinstance(value, list):
+            for child in value:
+                walk(child)
+
+    for payload in _json_payloads(raw):
+        walk(payload)
+    return candidates
+
+
+def _candidate_score(candidate: dict[str, str], query: str) -> int:
+    """Rank discovery snippets; factual context still comes only from fetch."""
+
+    title = candidate.get("title", "").casefold()
+    context = candidate.get("context", "").casefold()
+    combined = f"{title}\n{context}"
+    terms = [term.casefold() for term in _focused_terms(query)]
+    if not terms:
+        return 0
+
+    score = 0
+    exact_phrase = " ".join(terms)
+    if len(terms) >= 2 and exact_phrase in combined:
+        score += 200
+
+    for width in range(min(4, len(terms)), 1, -1):
+        weight = 20 * width
+        for index in range(len(terms) - width + 1):
+            phrase = " ".join(terms[index : index + width])
+            if phrase in combined:
+                score += weight
+
+    for term in terms:
+        if term in title:
+            score += 12
+        if term in context:
+            score += 4
+
+    return score
+
+
+def _rank_document_ids(raw_searches: list[str], query: str) -> list[str]:
+    """Merge search attempts and rank candidates before the fetch budget is spent."""
+
+    by_id: dict[str, dict[str, str]] = {}
+    original_order: list[str] = []
+
+    for raw in raw_searches:
+        for candidate in _search_candidates(raw):
+            document_id = candidate["id"]
+            if document_id not in by_id:
+                by_id[document_id] = candidate
+                original_order.append(document_id)
+                continue
+
+            current = by_id[document_id]
+            if len(candidate.get("context", "")) > len(current.get("context", "")):
+                current["context"] = candidate.get("context", "")
+            if not current.get("title") and candidate.get("title"):
+                current["title"] = candidate.get("title", "")
+
+    if not by_id:
+        fallback: list[str] = []
+        for raw in raw_searches:
+            for document_id in _document_ids(raw):
+                if document_id not in fallback:
+                    fallback.append(document_id)
+        return fallback
+
+    order_index = {
+        document_id: index for index, document_id in enumerate(original_order)
+    }
+    return sorted(
+        by_id,
+        key=lambda document_id: (
+            -_candidate_score(by_id[document_id], query),
+            order_index[document_id],
+        ),
+    )
 
 
 def _document_metadata(raw: str) -> dict[str, Any]:
@@ -336,34 +451,27 @@ def build_member_knowledge_context(agent: Any, query: str) -> str:
     if raw_search is None:
         return ""
 
-    document_ids = _document_ids(raw_search)
+    raw_searches = [raw_search]
+    broad_ids = _document_ids(raw_search)
     focused_query = _focused_query(query)
     if (
         focused_query
         and focused_query.casefold() != query.casefold()
-        and len(document_ids) != 1
+        and len(broad_ids) != 1
     ):
         logger.info("CamCore member knowledge retrying focused Outline search")
         focused_search = _run_search(list_tool, focused_query)
         if focused_search is not None:
-            focused_ids = _document_ids(focused_search)
-            if focused_ids:
-                document_ids = [
-                    *focused_ids,
-                    *(
-                        document_id
-                        for document_id in document_ids
-                        if document_id not in focused_ids
-                    ),
-                ]
+            raw_searches.append(focused_search)
+
+    document_ids = _rank_document_ids(raw_searches, query)
 
     logger.info(
         "CamCore member knowledge search completed with %d document match(es)",
         len(document_ids),
     )
 
-    parts: list[str] = []
-    fetched_excerpts = 0
+    verified: list[tuple[int, str, str]] = []
     for document_id in document_ids[:_MAX_FETCHED_DOCUMENTS]:
         try:
             result = fetch_tool.execute(resource="document", id=document_id)
@@ -380,19 +488,33 @@ def build_member_knowledge_context(agent: Any, query: str) -> str:
             continue
 
         title = _redact_member_knowledge(_document_title(raw_document))
+        fresh_score = _candidate_score(
+            {
+                "title": title,
+                "context": _document_text(raw_document),
+            },
+            query,
+        )
+        verified.append((fresh_score, title, excerpt))
+
+    if not verified:
+        logger.info("CamCore member knowledge returned no usable documentation")
+        return ""
+
+    verified.sort(key=lambda item: item[0], reverse=True)
+    if verified[0][0] >= 200:
+        verified = [verified[0]]
+
+    parts: list[str] = []
+    for _, title, excerpt in verified:
         if title:
             parts.append(f"Verified document: {title}\n{excerpt}")
         else:
             parts.append(f"Verified document excerpt:\n{excerpt}")
-        fetched_excerpts += 1
-
-    if not parts:
-        logger.info("CamCore member knowledge returned no usable documentation")
-        return ""
 
     logger.info(
         "CamCore member knowledge context built with %d verified excerpt(s)",
-        fetched_excerpts,
+        len(parts),
     )
     body = "\n\n".join(parts)
     return (
