@@ -70,28 +70,54 @@ approved Operations tools rather than inferring it or substituting public search
 _OUTLINE_MODEL_TOOL_NAMES = {"list_documents", "fetch"}
 
 
-def _guardrail_redact_operations_context(text: str) -> str:
-    """Pre-redact retrieval with the same scanners used by GuardrailsEngine.
+def _block_mode_redact(text: str) -> str | None:
+    """Redact server-generated text only when input Guardrails run in BLOCK mode.
 
-    Operations Outline context is server-generated, but it still passes through the
-    inference engine's BLOCK-mode input scanner. Applying the canonical redactors
-    here prevents already-retrieved documentation from blocking the whole request,
-    without weakening scanning of user input or model output.
+    The redactors mirror the scanners enabled by the active security configuration.
+    ``None`` means BLOCK mode is active but the redaction pass failed, so callers can
+    fail closed to a known-safe static prompt rather than forwarding unchecked text.
     """
+
+    try:
+        from openjarvis.core.config import load_config
+
+        security = load_config().security
+    except Exception:
+        logger.debug(
+            "Unable to resolve CamCore security config for server context",
+            exc_info=True,
+        )
+        return text
+
+    if (
+        not getattr(security, "enabled", False)
+        or not getattr(security, "scan_input", False)
+        or str(getattr(security, "mode", "")).lower() != "block"
+    ):
+        return text
 
     try:
         from openjarvis.security.scanner import PIIScanner, SecretScanner
 
         safe = text
-        for scanner in (SecretScanner(), PIIScanner()):
-            safe = scanner.redact(safe)
+        if getattr(security, "secret_scanner", False):
+            safe = SecretScanner().redact(safe)
+        if getattr(security, "pii_scanner", False):
+            safe = PIIScanner().redact(safe)
         return safe
     except Exception:
         logger.warning(
-            "CamCore operations Outline guardrail redaction failed",
+            "CamCore BLOCK-mode server context redaction failed",
             exc_info=True,
         )
-        return ""
+        return None
+
+
+def _guardrail_redact_operations_context(text: str) -> str:
+    """Pre-redact fetched Outline context before Operations model exposure."""
+
+    safe = _block_mode_redact(text)
+    return safe or ""
 
 
 def _fresh_operations_outline_context(agent: Any, query: str) -> str:
@@ -224,6 +250,46 @@ class CamCoreAssistantAgent(OrchestratorAgent):
             interactive=interactive,
             confirm_callback=confirm_callback,
         )
+
+    def _build_messages(
+        self,
+        input: str,
+        context: Optional[AgentContext] = None,
+        *,
+        system_prompt: Optional[str] = None,
+    ) -> list[Message]:
+        """Build messages and sanitise only Jarvis's server-built system prompt.
+
+        ``BaseAgent`` always places its generated system prompt first. That prompt can
+        include CamCore persona files plus server-generated memory/Outline context. In
+        BLOCK mode we canonical-redact that first server-built message so trusted
+        context cannot block inference. Any later caller-supplied system message and
+        every user message remain untouched and are still fully scanned by Guardrails.
+        """
+
+        messages = super()._build_messages(
+            input,
+            context,
+            system_prompt=system_prompt,
+        )
+        if not messages or messages[0].role != Role.SYSTEM:
+            return messages
+
+        original = messages[0]
+        safe = _block_mode_redact(original.content)
+        if safe is None:
+            safe = CAMCORE_SYSTEM_PROMPT
+        if safe != original.content:
+            messages[0] = Message(
+                role=original.role,
+                content=safe,
+                name=original.name,
+                tool_calls=original.tool_calls,
+                tool_call_id=original.tool_call_id,
+                metadata=original.metadata,
+                images=original.images,
+            )
+        return messages
 
     def run(
         self,
