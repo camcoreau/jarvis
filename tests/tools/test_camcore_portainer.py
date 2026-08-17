@@ -1,6 +1,6 @@
 """Tests for the CamCore Portainer operations connector."""
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: I001
 
 import json
 import os
