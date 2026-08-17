@@ -30,6 +30,8 @@ _MAX_DOCUMENT_EXCERPT_CHARS = 5_000
 _MAX_CONTEXT_CHARS = 10_000
 _MAX_FOCUSED_TERMS = 6
 
+# These words are intentionally excluded from excerpt relevance. They describe
+# the knowledge source rather than the subject the user is asking about.
 _STOP_WORDS = {
     "about",
     "according",
@@ -55,6 +57,44 @@ _STOP_WORDS = {
     "its",
     "jarvis",
     "outline",
+    "that",
+    "the",
+    "their",
+    "there",
+    "this",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+    "why",
+    "with",
+    "would",
+    "you",
+    "your",
+}
+
+# Focused Outline search is phrase-aware. Keep CamCore/source vocabulary here
+# because phrases such as "CamCore documentation marker" are materially more
+# selective than the single word "marker". Only conversational scaffolding is
+# removed.
+_SEARCH_STOP_WORDS = {
+    "about",
+    "according",
+    "after",
+    "again",
+    "also",
+    "and",
+    "are",
+    "can",
+    "current",
+    "does",
+    "for",
+    "from",
+    "have",
+    "how",
+    "into",
+    "its",
     "that",
     "the",
     "their",
@@ -119,6 +159,10 @@ def _should_lookup(query: str) -> bool:
     return any(cue in lowered for cue in _LOOKUP_CUES)
 
 
+def _tokens(query: str) -> list[str]:
+    return re.findall(r"[A-Za-z0-9][A-Za-z0-9_-]{2,}", query)
+
+
 def _query_terms(query: str) -> set[str]:
     return {
         token
@@ -128,19 +172,35 @@ def _query_terms(query: str) -> set[str]:
 
 
 def _focused_query(query: str) -> str:
-    """Reduce conversational wording to salient terms for Outline full-text search."""
+    """Reduce conversational wording to a phrase-aware Outline search query."""
 
     focused: list[str] = []
     seen: set[str] = set()
-    for token in re.findall(r"[A-Za-z0-9][A-Za-z0-9_-]{2,}", query):
+    for token in _tokens(query):
         lowered = token.lower()
-        if lowered in _STOP_WORDS or lowered in seen:
+        if lowered in _SEARCH_STOP_WORDS or lowered in seen:
             continue
         focused.append(token)
         seen.add(lowered)
         if len(focused) >= _MAX_FOCUSED_TERMS:
             break
     return " ".join(focused)
+
+
+def _ranking_terms(query: str) -> list[str]:
+    """Return ordered terms used only to rank Outline discovery results."""
+
+    terms: list[str] = []
+    seen: set[str] = set()
+    for token in _tokens(query):
+        lowered = token.lower()
+        if lowered in _SEARCH_STOP_WORDS or lowered in seen:
+            continue
+        terms.append(lowered)
+        seen.add(lowered)
+        if len(terms) >= _MAX_FOCUSED_TERMS:
+            break
+    return terms
 
 
 def _redact_member_knowledge(text: str) -> str:
@@ -222,6 +282,124 @@ def _document_ids(raw: str) -> list[str]:
     for payload in payloads:
         walk(payload)
     return ids
+
+
+def _search_candidates(raw: str) -> list[dict[str, str]]:
+    """Extract safe discovery metadata for ranking without model exposure."""
+
+    candidates: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            document = value.get("document")
+            if isinstance(document, dict):
+                document_id = document.get("id")
+                if (
+                    isinstance(document_id, str)
+                    and document_id
+                    and document_id not in seen
+                ):
+                    title = document.get("title")
+                    context = value.get("context")
+                    candidates.append(
+                        {
+                            "id": document_id,
+                            "title": title if isinstance(title, str) else "",
+                            "context": context if isinstance(context, str) else "",
+                        }
+                    )
+                    seen.add(document_id)
+            for child in value.values():
+                walk(child)
+        elif isinstance(value, list):
+            for child in value:
+                walk(child)
+
+    for payload in _json_payloads(raw):
+        walk(payload)
+    return candidates
+
+
+def _candidate_score(candidate: dict[str, str], query: str) -> int:
+    """Rank discovery metadata by phrase and term overlap with the user query."""
+
+    title = candidate.get("title", "").lower()
+    context = candidate.get("context", "").lower()
+    haystack = f"{title}\n{context}"
+    terms = _ranking_terms(query)
+    if not terms:
+        return 0
+
+    score = 0
+    phrase = " ".join(terms)
+    if phrase and phrase in haystack:
+        score += 200
+
+    # Adjacent term pairs strongly distinguish e.g. "documentation marker"
+    # from unrelated support-email text that happens to contain "marker".
+    for left, right in zip(terms, terms[1:]):
+        if f"{left} {right}" in haystack:
+            score += 40
+
+    distinctive = _query_terms(query)
+    for term in terms:
+        if term in context:
+            score += 12
+        if term in title:
+            score += 18
+    for term in distinctive:
+        if term in context:
+            score += 25
+        if term in title:
+            score += 30
+
+    return score
+
+
+def _ranked_document_ids(query: str, *search_outputs: str) -> list[str]:
+    """Rank the union of broad/focused Outline results before fetching bodies."""
+
+    candidates: dict[str, dict[str, str]] = {}
+    order: list[str] = []
+    fallback_ids: list[str] = []
+
+    for raw in search_outputs:
+        if not raw:
+            continue
+        for document_id in _document_ids(raw):
+            if document_id not in fallback_ids:
+                fallback_ids.append(document_id)
+        for candidate in _search_candidates(raw):
+            document_id = candidate["id"]
+            if document_id not in order:
+                order.append(document_id)
+            existing = candidates.get(document_id)
+            if existing is None:
+                candidates[document_id] = candidate
+                continue
+            # Preserve whichever search returned richer discovery text.
+            if len(candidate["title"] + candidate["context"]) > len(
+                existing["title"] + existing["context"]
+            ):
+                candidates[document_id] = candidate
+
+    if not candidates:
+        return fallback_ids
+
+    original_order = {document_id: index for index, document_id in enumerate(order)}
+    ranked = sorted(
+        candidates.values(),
+        key=lambda candidate: (
+            -_candidate_score(candidate, query),
+            original_order.get(candidate["id"], len(original_order)),
+        ),
+    )
+    ranked_ids = [candidate["id"] for candidate in ranked]
+    ranked_ids.extend(
+        document_id for document_id in fallback_ids if document_id not in ranked_ids
+    )
+    return ranked_ids
 
 
 def _document_metadata(raw: str) -> dict[str, Any]:
@@ -336,26 +514,21 @@ def build_member_knowledge_context(agent: Any, query: str) -> str:
     if raw_search is None:
         return ""
 
-    document_ids = _document_ids(raw_search)
+    search_outputs = [raw_search]
+    broad_ids = _document_ids(raw_search)
     focused_query = _focused_query(query)
-    if (
-        focused_query
-        and focused_query.casefold() != query.casefold()
-        and len(document_ids) != 1
-    ):
+    if focused_query and focused_query.casefold() != query.casefold():
+        # Always run one phrase-aware focused search. A single broad result can
+        # still be the wrong document, and the total search/fetch bounds remain
+        # fixed and small.
         logger.info("CamCore member knowledge retrying focused Outline search")
         focused_search = _run_search(list_tool, focused_query)
         if focused_search is not None:
-            focused_ids = _document_ids(focused_search)
-            if focused_ids:
-                document_ids = [
-                    *focused_ids,
-                    *(
-                        document_id
-                        for document_id in document_ids
-                        if document_id not in focused_ids
-                    ),
-                ]
+            search_outputs.append(focused_search)
+
+    document_ids = _ranked_document_ids(query, *search_outputs)
+    if not document_ids:
+        document_ids = broad_ids
 
     logger.info(
         "CamCore member knowledge search completed with %d document match(es)",
