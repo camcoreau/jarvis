@@ -64,24 +64,17 @@ def test_fresh_fetch_wins_over_stale_outline_search_context():
     class _Agent:
         _tools = [search, fetch]
 
-    context = build_member_knowledge_context(
-        _Agent(),
-        "According to the current CamCore documentation, what is the CamCore validation phrase?",
+    query = (
+        "According to the current CamCore documentation, what is the CamCore "
+        "validation phrase?"
     )
+    context = build_member_knowledge_context(_Agent(), query)
 
     assert "APPROVED CAMCORE MEMBER KNOWLEDGE" in context
     assert "SILVER-KOALA-4821" in context
     assert "BLUE-ORCHID-7319" not in context
     assert "Search context" not in context
-    assert search.calls == [
-        {
-            "query": (
-                "According to the current CamCore documentation, what is the "
-                "CamCore validation phrase?"
-            ),
-            "limit": 5,
-        }
-    ]
+    assert search.calls == [{"query": query, "limit": 5}]
     assert fetch.calls == [{"resource": "document", "id": "validation-doc"}]
 
 
@@ -100,7 +93,10 @@ def test_stale_search_snippet_is_not_used_when_fetch_has_no_relevant_excerpt():
     fetch = _FakeMcpTool(
         "fetch",
         client,
-        '{"document":{"id":"validation-doc","title":"Validation"}}\nUnrelated text.',
+        (
+            '{"document":{"id":"validation-doc","title":"Validation"}}\n'
+            "Unrelated text."
+        ),
     )
 
     class _Agent:
