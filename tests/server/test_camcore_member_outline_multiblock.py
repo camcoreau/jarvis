@@ -102,6 +102,6 @@ def test_member_knowledge_handles_outline_zero_result_array():
     assert context == ""
     assert list_tool.calls == [
         {"query": "What is Earth in CamCore?", "limit": 5},
-        {"query": "Earth CamCore", "limit": 5},
+        {"query": "Earth", "limit": 5},
     ]
     assert fetch_tool.calls == []
