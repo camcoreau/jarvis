@@ -442,7 +442,11 @@ def _operations_capability_context(agent: Any) -> str:
         ):
             continue
 
-        scope = "confirmation required for changes" if requires_confirmation else "read/live"
+        scope = (
+            "confirmation required for changes"
+            if requires_confirmation
+            else "read/live"
+        )
         if not description:
             description = "Approved CamCore Operations capability."
         entries.append(f"- {name} [{scope}]: {description}")
