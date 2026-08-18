@@ -72,6 +72,7 @@ _STOP_WORDS = {
     "your",
 }
 _FOCUSED_STOP_WORDS = _STOP_WORDS - {"camcore", "documentation"}
+_IDENTITY_FALLBACK_TERMS = {"camcore", "jarvis"}
 
 _IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 _PRIVATE_HOST_RE = re.compile(r"\b(?:[a-z0-9-]+\.)+camcore\.network\b", re.IGNORECASE)
@@ -121,11 +122,15 @@ def _should_lookup(query: str) -> bool:
 
 
 def _query_terms(query: str) -> set[str]:
-    return {
-        token
-        for token in re.findall(r"[a-z0-9][a-z0-9_-]{2,}", query.lower())
-        if token not in _STOP_WORDS
-    }
+    tokens = re.findall(r"[a-z0-9][a-z0-9_-]{2,}", query.lower())
+    terms = {token for token in tokens if token not in _STOP_WORDS}
+    if terms:
+        return terms
+
+    # Identity questions such as "What is CamCore?" intentionally reduce to no
+    # distinctive terms. In that narrow case, retain the identity noun as an
+    # excerpt anchor rather than discarding a freshly fetched canonical document.
+    return {token for token in tokens if token in _IDENTITY_FALLBACK_TERMS}
 
 
 def _focused_terms(query: str) -> list[str]:
@@ -454,10 +459,11 @@ def build_member_knowledge_context(agent: Any, query: str) -> str:
     raw_searches = [raw_search]
     broad_ids = _document_ids(raw_search)
     focused_query = _focused_query(query)
+    force_identity_focus = focused_query.casefold() in _IDENTITY_FALLBACK_TERMS
     if (
         focused_query
         and focused_query.casefold() != query.casefold()
-        and len(broad_ids) != 1
+        and (len(broad_ids) != 1 or force_identity_focus)
     ):
         logger.info("CamCore member knowledge retrying focused Outline search")
         focused_search = _run_search(list_tool, focused_query)
