@@ -33,10 +33,7 @@ jobs:
         run: uv run ruff check src/ tests/
 
       - name: Ruff format check
-        run: |
-          uv run ruff format src/openjarvis/agents/camcore_assistant.py tests/agents/test_camcore_capability_awareness.py
-          git diff -- src/openjarvis/agents/camcore_assistant.py tests/agents/test_camcore_capability_awareness.py
-          exit 1
+        run: uv run ruff format --check src/ tests/
 
   test:
     runs-on: ubuntu-latest
