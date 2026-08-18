@@ -1,0 +1,1 @@
+Direct CamCore identity questions are answered deterministically from the canonical organisational definition. This prevents broad policy or operations documents from being synthesised into a new definition by the local model.
