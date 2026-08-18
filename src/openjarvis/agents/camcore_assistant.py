@@ -429,9 +429,7 @@ def _operations_capability_context(agent: Any) -> str:
             name = str(spec.name or getattr(tool, "tool_id", "")).strip()
             description = " ".join(str(spec.description or "").split())
             category = str(getattr(spec, "category", "") or "").strip().lower()
-            requires_confirmation = bool(
-                getattr(spec, "requires_confirmation", False)
-            )
+            requires_confirmation = bool(getattr(spec, "requires_confirmation", False))
         except Exception:
             continue
 
