@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 CONFIG = Path("deploy/camcore/config.toml")
 
 
