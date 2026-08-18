@@ -12,6 +12,12 @@ from openjarvis.server.camcore_member_knowledge import (
 )
 from openjarvis.tools._stubs import ToolSpec
 
+_DEFINITION = (
+    "CamCore is a privately owned and operated family technology network that "
+    "delivers secure, reliable and professionally managed digital services for "
+    "the Cameron household, Cameron-Media and associated family operations."
+)
+
 
 class _IdentityListTool:
     tool_id = "mcp_adapter"
@@ -27,37 +33,28 @@ class _IdentityListTool:
 
     def execute(self, **params):
         self.calls.append(params)
-        query = params.get("query")
-        if query == "CamCore":
-            content = json.dumps(
-                [
-                    {
-                        "document": {
-                            "id": "doc-definition",
-                            "title": "CamCore",
-                        },
-                        "context": (
-                            "CamCore is a privately owned and operated family "
-                            "technology network."
-                        ),
-                    }
-                ]
-            )
+        if params.get("query") == "CamCore":
+            document_id = "doc-definition"
+            title = "CamCore"
+            context = _DEFINITION
         else:
-            # Reproduce the edge case that previously suppressed the focused retry:
-            # the broad conversational search returns exactly one result.
-            content = json.dumps(
-                [
-                    {
-                        "document": {
-                            "id": "doc-generic",
-                            "title": "Operations Notes",
-                        },
-                        "context": "CamCore operational notes.",
-                    }
-                ]
-            )
-        return ToolResult(tool_name=self.spec.name, content=content, success=True)
+            document_id = "doc-generic"
+            title = "Operations Notes"
+            context = "CamCore operational notes."
+
+        content = json.dumps(
+            [
+                {
+                    "document": {"id": document_id, "title": title},
+                    "context": context,
+                }
+            ]
+        )
+        return ToolResult(
+            tool_name=self.spec.name,
+            content=content,
+            success=True,
+        )
 
 
 class _IdentityFetchTool:
@@ -76,23 +73,21 @@ class _IdentityFetchTool:
         self.calls.append(params)
         document_id = params["id"]
         if document_id == "doc-definition":
-            body = (
-                "CamCore is a privately owned and operated family technology "
-                "network that delivers secure, reliable and professionally "
-                "managed digital services for the Cameron household, "
-                "Cameron-Media and associated family operations."
-            )
             title = "CamCore"
+            body = _DEFINITION
         else:
-            body = "CamCore operational notes for administrators."
             title = "Operations Notes"
-        content = "\n".join(
-            [
-                json.dumps({"document": {"id": document_id, "title": title}}),
-                body,
-            ]
+            body = "CamCore operational notes for administrators."
+
+        metadata = json.dumps(
+            {"document": {"id": document_id, "title": title}}
         )
-        return ToolResult(tool_name=self.spec.name, content=content, success=True)
+        content = f"{metadata}\n{body}"
+        return ToolResult(
+            tool_name=self.spec.name,
+            content=content,
+            success=True,
+        )
 
 
 def _identity_agent():
@@ -115,17 +110,13 @@ def test_specific_camcore_query_still_prefers_distinctive_subject():
 
 
 def test_identity_excerpt_can_use_fresh_canonical_definition():
-    raw = "\n".join(
-        [
-            json.dumps({"document": {"id": "doc-definition", "title": "CamCore"}}),
-            "# CamCore",
-            (
-                "CamCore is a privately owned and operated family technology "
-                "network."
-            ),
-        ]
+    metadata = json.dumps(
+        {"document": {"id": "doc-definition", "title": "CamCore"}}
     )
+    raw = f"{metadata}\n# CamCore\n{_DEFINITION}"
+
     excerpt = _relevant_excerpt(raw, "What is CamCore?")
+
     assert "privately owned and operated family technology network" in excerpt
 
 
@@ -138,6 +129,9 @@ def test_identity_query_forces_focused_search_even_after_one_broad_match():
         {"query": "What is CamCore?", "limit": 5},
         {"query": "CamCore", "limit": 5},
     ]
-    assert fetch_tool.calls[0] == {"resource": "document", "id": "doc-definition"}
+    assert fetch_tool.calls[0] == {
+        "resource": "document",
+        "id": "doc-definition",
+    }
     assert "APPROVED CAMCORE MEMBER KNOWLEDGE" in context
     assert "privately owned and operated family technology network" in context
