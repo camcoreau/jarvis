@@ -57,6 +57,24 @@ CamCore knowledge source:
 - If no relevant documentation is supplied, say so and do not invent undocumented
   CamCore-specific facts.
 
+Capability truthfulness:
+- A server-generated CamCore Operations Capability Inventory may be supplied for the
+  current request. Treat it as authoritative for which approved live capabilities are
+  attached to this Operations session.
+- Capability availability means you can attempt that approved check or action. It is
+  not itself evidence that a backend is reachable, healthy, or currently in a
+  particular state. Only a successful live tool result is a live observation.
+- Clearly distinguish documented state, available live capability, live observation,
+  and unavailable capability. Never blur those categories.
+- Do not say that you have no live access if the capability inventory contains a
+  relevant live connector. State the actual scope instead.
+- If a required capability is not in the inventory, say that no current-session tool
+  is available for that check. Do not imply broader access through documentation.
+- Never describe a physical server as a "read-only documented entity". Documentation
+  describes the server; the server itself is an operational system.
+- Do not infer RAID/SHR layout from drive counts, infer service purpose from a name, or
+  infer current disk, host, service, or network health from documentation alone.
+
 Be concise, practical, and operationally focused. Explain risks before recommending
 changes that could affect availability, security, data integrity, or user access.
 """
@@ -72,6 +90,21 @@ state and do not by themselves prove current runtime health.
 This prefetch is deliberately bounded and sanitised before model exposure. If an
 authorised operational task genuinely needs additional restricted detail, use the
 approved Operations tools rather than inferring it or substituting public search.
+"""
+
+_OPERATIONS_CAPABILITY_PRIORITY = """CAMCORE OPERATIONS CAPABILITY INVENTORY
+The following capability list is generated server-side from approved CamCore
+Operations tools attached to this session before any documentation-only fast-path can
+hide tool schemas from the model.
+
+Interpret this inventory precisely:
+- An entry means the capability is available to attempt in this session.
+- It does not prove current backend reachability or runtime state.
+- Only a successful tool result is a live observation.
+- If a relevant capability is listed, do not claim that no live access exists.
+- If a capability is not listed, do not claim it is available.
+- Documentation-only questions may intentionally suppress tool execution after this
+  inventory is built; describe what can be checked separately from what was checked.
 """
 
 _OUTLINE_MODEL_TOOL_NAMES = {"list_documents", "fetch"}
@@ -130,13 +163,23 @@ _LIVE_STATE_PHRASES = (
     "live status",
     "current status",
     "service status",
+    "container status",
+    "disk usage",
+    "free space",
+    "storage health",
+    "raid health",
+    "shr health",
+    "smart status",
+    "resource usage",
     "is it online",
     "is it offline",
     "is it running",
+    "is it healthy",
     "is it reachable",
     "right now",
     "latest logs",
     "current logs",
+    "recent logs",
 )
 
 _CAMCORE_IDENTITY_QUERIES = {
@@ -156,6 +199,23 @@ def _is_camcore_identity_question(query: str) -> bool:
     return normalized in _CAMCORE_IDENTITY_QUERIES
 
 
+def _asks_for_live_state(query: str) -> bool:
+    """Return true when a question needs a live observation rather than docs only."""
+
+    normalized = " ".join((query or "").strip().lower().split())
+    if not normalized:
+        return False
+    if any(phrase in normalized for phrase in _LIVE_STATE_PHRASES):
+        return True
+
+    live_patterns = (
+        r"\bis\s+.+\s+(online|offline|running|healthy|unhealthy|reachable)\b",
+        r"\b(show|list|check|verify|inspect)\b.*\b(containers?|logs?|status|health|usage|uptime)\b",
+        r"\b(what|which)\b.*\bcontainers?\b.*\b(running|stopped|healthy|unhealthy)\b",
+    )
+    return any(re.search(pattern, normalized) for pattern in live_patterns)
+
+
 def _is_read_only_documentation_lookup(query: str) -> bool:
     """Return true for answer-only documentation questions.
 
@@ -172,7 +232,7 @@ def _is_read_only_documentation_lookup(query: str) -> bool:
         return False
     if any(phrase in normalized for phrase in _OPERATION_ACTION_REQUEST_PHRASES):
         return False
-    if any(phrase in normalized for phrase in _LIVE_STATE_PHRASES):
+    if _asks_for_live_state(normalized):
         return False
 
     if "according to" in normalized and any(
@@ -284,7 +344,7 @@ def _block_mode_redact(text: str, engine: Any = None) -> str | None:
 
 
 def _guardrail_redact_operations_context(text: str, engine: Any = None) -> str:
-    """Pre-redact fetched Outline context before Operations model exposure."""
+    """Pre-redact trusted Operations context before model exposure."""
 
     safe = _block_mode_redact(text, engine)
     return safe or ""
@@ -321,11 +381,11 @@ def _fresh_operations_outline_context(agent: Any, query: str) -> str:
     return f"{_OPERATIONS_OUTLINE_PRIORITY}\n\n{context}"
 
 
-def _with_operations_outline_context(
+def _with_operations_server_context(
     context: Optional[AgentContext],
-    knowledge_context: str,
+    server_context: str,
 ) -> AgentContext:
-    """Clone request context and merge fresh Outline text into the system prompt."""
+    """Clone request context and merge trusted server text into the system prompt."""
 
     enriched = AgentContext()
     if context is not None:
@@ -338,8 +398,8 @@ def _with_operations_outline_context(
     enriched.conversation.add(
         Message(
             role=Role.SYSTEM,
-            content=knowledge_context,
-            metadata={"memory_context": True, "camcore_outline": True},
+            content=server_context,
+            metadata={"memory_context": True, "camcore_operations_context": True},
         )
     )
     return enriched
@@ -355,6 +415,48 @@ def _is_server_side_outline_tool(tool: Any) -> bool:
     except Exception:
         return False
     return name in _OUTLINE_MODEL_TOOL_NAMES
+
+
+def _operations_capability_context(agent: Any) -> str:
+    """Describe CamCore live capabilities without claiming any live observation."""
+
+    entries: list[str] = []
+    for tool in getattr(agent, "_tools", None) or []:
+        if _is_server_side_outline_tool(tool):
+            continue
+        try:
+            spec = tool.spec
+            name = str(spec.name or getattr(tool, "tool_id", "")).strip()
+            description = " ".join(str(spec.description or "").split())
+            category = str(getattr(spec, "category", "") or "").strip().lower()
+            requires_confirmation = bool(getattr(spec, "requires_confirmation", False))
+        except Exception:
+            continue
+
+        if not name:
+            continue
+        if category not in {"camcore", "operations"} and not name.startswith(
+            "camcore_"
+        ):
+            continue
+
+        scope = (
+            "confirmation required for changes"
+            if requires_confirmation
+            else "read/live"
+        )
+        if not description:
+            description = "Approved CamCore Operations capability."
+        entries.append(f"- {name} [{scope}]: {description}")
+
+    if not entries:
+        return ""
+
+    inventory = _OPERATIONS_CAPABILITY_PRIORITY + "\n\n" + "\n".join(sorted(entries))
+    return _guardrail_redact_operations_context(
+        inventory,
+        getattr(agent, "_engine", None),
+    )
 
 
 def _operations_model_view(agent: Any, *, allow_tools: bool = True) -> Any:
@@ -475,7 +577,7 @@ class CamCoreAssistantAgent(OrchestratorAgent):
         context: Optional[AgentContext] = None,
         **kwargs: Any,
     ) -> AgentResult:
-        """Run Operations with fresh Outline facts preloaded when relevant."""
+        """Run Operations with fresh Outline facts and truthful capability scope."""
 
         if _is_camcore_identity_question(input):
             return AgentResult(
@@ -484,9 +586,16 @@ class CamCoreAssistantAgent(OrchestratorAgent):
                 metadata={"camcore_canonical_identity": True},
             )
 
+        capability_context = _operations_capability_context(self)
         knowledge_context = _fresh_operations_outline_context(self, input)
-        if knowledge_context:
-            context = _with_operations_outline_context(context, knowledge_context)
+        server_sections = [
+            value for value in (capability_context, knowledge_context) if value
+        ]
+        if server_sections:
+            context = _with_operations_server_context(
+                context,
+                "\n\n".join(server_sections),
+            )
 
         answer_only = bool(knowledge_context) and _is_read_only_documentation_lookup(
             input
