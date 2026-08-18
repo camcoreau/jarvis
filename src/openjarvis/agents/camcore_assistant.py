@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import re
 from typing import Any, List, Optional
 
 from openjarvis.agents._stubs import AgentContext, AgentResult
@@ -15,6 +16,12 @@ from openjarvis.engine._stubs import InferenceEngine
 from openjarvis.tools._stubs import BaseTool
 
 logger = logging.getLogger(__name__)
+
+CAMCORE_CANONICAL_DEFINITION = (
+    "CamCore is a privately owned and operated family technology network that "
+    "delivers secure, reliable and professionally managed digital services for "
+    "the Cameron household, Cameron-Media and associated family operations."
+)
 
 CAMCORE_SYSTEM_PROMPT = """You are Jarvis, the private AI operations assistant for
 CamCore.
@@ -131,6 +138,22 @@ _LIVE_STATE_PHRASES = (
     "latest logs",
     "current logs",
 )
+
+_CAMCORE_IDENTITY_QUERIES = {
+    "what is camcore",
+    "whats camcore",
+    "define camcore",
+    "describe camcore",
+    "explain camcore",
+    "tell me about camcore",
+}
+
+
+def _is_camcore_identity_question(query: str) -> bool:
+    """Return true only for direct questions asking what CamCore itself is."""
+
+    normalized = re.sub(r"[^a-z0-9]+", " ", (query or "").lower()).strip()
+    return normalized in _CAMCORE_IDENTITY_QUERIES
 
 
 def _is_read_only_documentation_lookup(query: str) -> bool:
@@ -453,6 +476,13 @@ class CamCoreAssistantAgent(OrchestratorAgent):
         **kwargs: Any,
     ) -> AgentResult:
         """Run Operations with fresh Outline facts preloaded when relevant."""
+
+        if _is_camcore_identity_question(input):
+            return AgentResult(
+                content=CAMCORE_CANONICAL_DEFINITION,
+                turns=0,
+                metadata={"camcore_canonical_identity": True},
+            )
 
         knowledge_context = _fresh_operations_outline_context(self, input)
         if knowledge_context:
