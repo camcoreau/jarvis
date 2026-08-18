@@ -111,5 +111,8 @@ def test_live_state_language_is_not_documentation_only():
         )
         is False
     )
-    assert _is_read_only_documentation_lookup("What is the disk usage on Earth?") is False
+    assert (
+        _is_read_only_documentation_lookup("What is the disk usage on Earth?")
+        is False
+    )
     assert _is_read_only_documentation_lookup("Is Plex healthy on Earth?") is False
