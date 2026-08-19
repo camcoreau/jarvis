@@ -72,6 +72,8 @@ services:
       OPENJARVIS_HOME: /data
       OPENJARVIS_CONFIG: /etc/openjarvis/camcore-config.toml
       OPENJARVIS_API_KEY: ${OPENJARVIS_API_KEY:?Set OPENJARVIS_API_KEY before deployment}
+      CAMCORE_ACCESS_MODE: ${CAMCORE_ACCESS_MODE:-trusted-proxy}
+      CAMCORE_PROXY_IDENTITY_SECRET: ${CAMCORE_PROXY_IDENTITY_SECRET:?Set CAMCORE_PROXY_IDENTITY_SECRET before deployment}
       CAMCORE_OUTLINE_API_KEY: ${CAMCORE_OUTLINE_API_KEY:?Set CAMCORE_OUTLINE_API_KEY before deployment}
       # Live CamCore Docker control plane. Keep the API key only in Portainer's
       # stack environment; the model receives logical environment/container names.
@@ -84,7 +86,7 @@ services:
       CAMCORE_OPENAI_FALLBACK_LOCAL: ${CAMCORE_OPENAI_FALLBACK_LOCAL:-true}
       CAMCORE_MEMBER_OPENAI_ENABLED: ${CAMCORE_MEMBER_OPENAI_ENABLED:-true}
       CAMCORE_ADMIN_OPENAI_ENABLED: ${CAMCORE_ADMIN_OPENAI_ENABLED:-true}
-      CAMCORE_MEMBER_AUTO_PROVIDER: ${CAMCORE_MEMBER_AUTO_PROVIDER:-openai}
+      CAMCORE_MEMBER_AUTO_PROVIDER: ${CAMCORE_MEMBER_AUTO_PROVIDER:-local}
       CAMCORE_ADMIN_AUTO_PROVIDER: ${CAMCORE_ADMIN_AUTO_PROVIDER:-local}
       OPENJARVIS_NO_UPDATE_CHECK: "1"
       OLLAMA_HOST: http://ollama:11434
