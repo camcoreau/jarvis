@@ -18,6 +18,7 @@ import {
   ScrollText,
   Database,
   ShieldCheck,
+  Activity,
 } from 'lucide-react';
 import { ConversationList } from './ConversationList';
 import { useAppStore } from '../../lib/store';
@@ -60,6 +61,7 @@ export function Sidebar() {
   ];
 
   const systemNav = [
+    { path: '/runtime', icon: Activity, label: 'Runtime' },
     { path: '/logs', icon: ScrollText, label: 'Activity Logs' },
     { path: '/settings', icon: Settings, label: 'Settings' },
     { path: '/get-started', icon: Rocket, label: 'Setup' },
