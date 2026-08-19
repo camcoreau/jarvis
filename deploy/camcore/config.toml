@@ -57,6 +57,10 @@ Integration boundaries:
   is limited to subscribed service health and service issues.
 - GitHub reads only repositories explicitly allow-listed server-side and returns
   bounded issue and Actions status. It does not provide write access.
+- Tautulli provides aggregate current CamCore Media activity only: counts,
+  stream/transcode decisions, media-type totals, session-state totals and
+  aggregate bandwidth. Never reveal usernames, media titles, IP addresses,
+  player identities, file paths or individual viewing history from Tautulli.
 - Synology DSM capability discovery uses SYNO.API.Info only. It does not prove or
   expose physical disk health, SMART data, storage-pool health, RAID/SHR state,
   filesystem capacity/free space, NAS hardware health, or UPS state.
@@ -97,6 +101,7 @@ enabled = [
   "camcore_homeassistant_state",
   "camcore_m365_service_health",
   "camcore_github_overview",
+  "camcore_tautulli_activity",
   "camcore_synology_api_inventory",
 ]
 
