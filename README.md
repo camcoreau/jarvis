@@ -52,10 +52,10 @@ Browser-controlled role headers are not trusted. The authentication proxy must d
 
 The CamCore UI separates **Operations** from **Runtime**:
 
-- **Operations** shows approved infrastructure capabilities and current evidence. Portainer currently provides Docker container observations and confirmation-gated container start/stop/restart actions.
+- **Operations** shows approved infrastructure capabilities and current evidence from configured read-only sources, plus the existing confirmation-gated Docker control boundary.
 - **Runtime** shows Jarvis inference telemetry, energy information, trace debugging and estimated local-vs-cloud cost comparison.
 
-The capability inventory explicitly reports integrations that are not yet available rather than pretending they are healthy. In particular, Portainer must never be used as evidence for Synology storage pools, SMART, RAID/SHR, filesystem capacity, NAS hardware or UPS state.
+The capability inventory explicitly reports missing capabilities instead of pretending they are healthy. In particular, Portainer and Synology API discovery must never be used as evidence for Synology storage pools, SMART, RAID/SHR, filesystem capacity, NAS hardware or UPS state.
 
 ## Current CamCore integrations
 
@@ -65,29 +65,42 @@ Jarvis discovers only the approved read tools used to search and fetch CamCore d
 
 ### Portainer — Docker Operations
 
-Jarvis can:
+Jarvis can list Portainer environments, inspect allow-listed Docker state and health, read bounded/redacted logs and perform start/stop/restart only through confirmation-gated tooling. Portainer is not a NAS or host-storage monitor.
 
-- list Portainer environments;
-- inspect allow-listed container state and Docker health;
-- read CPU, memory and network statistics;
-- read bounded, secret/PII-redacted logs;
-- start, stop or restart a container only through confirmation-gated tooling.
+### Better Stack — uptime and incidents
 
-It cannot use Portainer as a substitute for host/NAS monitoring.
+Jarvis can read configured uptime monitor names/statuses and unresolved incident summaries. It deliberately omits request headers, response bodies and monitored URLs from the model-facing payload.
 
-## Planned read-first integrations
+### YouTrack — read-only Operations work
 
-The Operations capability inventory reserves explicit boundaries for the next integrations without claiming they are already implemented:
+Jarvis can read a bounded set of issues selected by a server-configured query. It returns issue IDs, summaries, project, resolution state and a small allow-list of operational custom fields. The tool has no issue-write method.
 
-1. Synology DSM / host storage and UPS health.
-2. Infrastructure/service monitoring.
-3. Microsoft 365 service, licence, device and security context.
-4. GitHub repository, PR, issue and workflow context.
-5. YouTrack Operations and Support context.
-6. Home Assistant approved state.
-7. CamCore Media status and activity.
+### Home Assistant — entity-scoped state
 
-Each integration should begin read-only. Writes require a separately defined approval boundary and audit behaviour.
+Jarvis can read current state only for entity IDs explicitly listed in `CAMCORE_HOMEASSISTANT_ENTITIES`. It does not enumerate all household state and drops location/arbitrary attributes from returned state objects.
+
+### Microsoft 365 — service health
+
+Jarvis can use a dedicated Microsoft Graph application with `ServiceHealth.Read.All` to read subscribed service health and current service issues. This integration does not grant mailbox, user, device or configuration write access.
+
+### GitHub — allow-listed repository status
+
+Jarvis can read bounded issue and Actions state only for repositories listed in `CAMCORE_GITHUB_REPOSITORIES`. No repository target can be supplied by the model, and the tool contains no write operation.
+
+### Synology DSM — capability discovery only
+
+Jarvis can call the documented `SYNO.API.Info` endpoint to discover API names and supported versions advertised by the configured DSM. This does **not** expose or claim physical disk, SMART, storage-pool, RAID/SHR, filesystem, hardware or UPS health.
+
+## Remaining read-first integrations
+
+The main remaining capability gaps are:
+
+1. A documented and supportable Synology/host source for volume, storage-pool, SMART, hardware and UPS health.
+2. Deeper host telemetry where Better Stack uptime checks are insufficient.
+3. Optional Microsoft 365 licensing/device/security readers, each with its own least-privilege permission boundary.
+4. Dedicated CamCore Media service activity beyond generic uptime monitoring.
+
+Any write expansion requires a separately defined approval boundary, rollback path and audit behaviour.
 
 ## Production deployment
 
