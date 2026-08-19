@@ -7,6 +7,12 @@ import {
   Boxes,
   CheckCircle2,
   CircleDashed,
+  Cloud,
+  GitBranch,
+  HardDrive,
+  House,
+  ListChecks,
+  Radio,
   RefreshCw,
   Server,
   ShieldCheck,
@@ -15,6 +21,7 @@ import {
   fetchCamCoreOperationsOverview,
   type CamCoreCapability,
   type CamCoreOperationsOverview,
+  type CamCoreOperationsSource,
 } from '../lib/camcore-api';
 
 function EvidenceBadge({ capability }: { capability: CamCoreCapability }) {
@@ -41,6 +48,58 @@ function EvidenceBadge({ capability }: { capability: CamCoreCapability }) {
       {label}
     </span>
   );
+}
+
+function SourceBadge({ source }: { source?: CamCoreOperationsSource }) {
+  const state = source?.state ?? 'unavailable';
+  const label = state === 'live' ? 'LIVE' : state === 'available' ? 'AVAILABLE' : state.toUpperCase();
+  const positive = state === 'live' || state === 'available';
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold tracking-[0.08em]"
+      style={{
+        color: state === 'live' ? 'var(--color-success)' : positive ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+        border: '1px solid var(--color-border)',
+      }}
+    >
+      {state === 'live' ? <CheckCircle2 size={10} /> : <CircleDashed size={10} />}
+      {label}
+    </span>
+  );
+}
+
+function numeric(data: Record<string, unknown> | undefined, key: string): number | null {
+  const value = data?.[key];
+  return typeof value === 'number' ? value : null;
+}
+
+function sourceSummary(id: string, source?: CamCoreOperationsSource): string {
+  if (!source) return 'No evidence source is attached.';
+  if (source.state !== 'live') return source.detail ?? 'No live observation has completed.';
+  const data = source.data;
+  if (id === 'betterstack') {
+    const monitors = numeric(data, 'monitor_count');
+    const incidents = numeric(data, 'active_incident_count');
+    if (monitors !== null && incidents !== null) return `${monitors} monitors · ${incidents} active incidents`;
+  }
+  if (id === 'youtrack') {
+    const issues = numeric(data, 'issue_count');
+    if (issues !== null) return `${issues} issues matched the Operations query`;
+  }
+  if (id === 'm365') {
+    const services = numeric(data, 'service_count');
+    const issues = numeric(data, 'active_issue_count');
+    if (services !== null && issues !== null) return `${services} subscribed services · ${issues} active issues`;
+  }
+  if (id === 'github') {
+    const repositories = numeric(data, 'repository_count');
+    if (repositories !== null) return `${repositories} allow-listed repositories observed`;
+  }
+  if (id === 'synology') {
+    const apis = numeric(data, 'api_count');
+    if (apis !== null) return `${apis} advertised DSM APIs discovered · not storage health`;
+  }
+  return 'Live evidence returned.';
 }
 
 export function DashboardPage() {
@@ -71,7 +130,6 @@ export function DashboardPage() {
   const environments = portainer?.data?.environments ?? [];
   const totals = useMemo(
     () => ({
-      containers: environments.reduce((sum, item) => sum + (item.container_count ?? 0), 0),
       running: environments.reduce((sum, item) => sum + (item.running ?? 0), 0),
       unhealthy: environments.reduce((sum, item) => sum + (item.unhealthy ?? 0), 0),
       capabilities: overview?.capabilities.filter((item) => item.available).length ?? 0,
@@ -83,6 +141,14 @@ export function DashboardPage() {
     { label: 'Containers running', value: totals.running, icon: Boxes },
     { label: 'Unhealthy', value: totals.unhealthy, icon: Activity },
     { label: 'Capabilities available', value: totals.capabilities, icon: ShieldCheck },
+  ];
+  const evidenceSources: Array<{ id: string; label: string; icon: LucideIcon }> = [
+    { id: 'betterstack', label: 'Better Stack', icon: Radio },
+    { id: 'youtrack', label: 'YouTrack', icon: ListChecks },
+    { id: 'm365', label: 'Microsoft 365', icon: Cloud },
+    { id: 'github', label: 'GitHub', icon: GitBranch },
+    { id: 'homeassistant', label: 'Home Assistant', icon: House },
+    { id: 'synology', label: 'Synology DSM', icon: HardDrive },
   ];
 
   return (
@@ -149,15 +215,7 @@ export function DashboardPage() {
                 Portainer evidence covers Docker only — never NAS disks, SMART, storage pools, RAID/SHR or UPS state.
               </p>
             </div>
-            <span
-              className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-[0.08em]"
-              style={{
-                color: portainer?.state === 'live' ? 'var(--color-success)' : 'var(--color-text-tertiary)',
-                border: '1px solid var(--color-border)',
-              }}
-            >
-              {portainer?.state === 'live' ? 'LIVE' : portainer?.state?.toUpperCase() ?? 'CHECKING'}
-            </span>
+            <SourceBadge source={portainer} />
           </div>
 
           {portainer?.state === 'live' ? (
@@ -193,6 +251,37 @@ export function DashboardPage() {
               {portainer?.detail ?? 'No live Portainer observation has completed.'}
             </div>
           )}
+        </section>
+
+        <section className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Activity size={15} style={{ color: 'var(--color-accent)' }} />
+            <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Operational sources</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {evidenceSources.map(({ id, label, icon: SourceIcon }) => {
+              const source = overview?.sources[id];
+              return (
+                <article key={id} className="rounded-2xl p-4" style={{ border: '1px solid var(--color-border)', background: 'rgba(255,255,255,.014)' }}>
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-2">
+                      <SourceIcon size={15} style={{ color: 'var(--color-accent)' }} />
+                      <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>{label}</h3>
+                    </div>
+                    <SourceBadge source={source} />
+                  </div>
+                  <p className="text-xs leading-5" style={{ color: 'var(--color-text-secondary)' }}>
+                    {sourceSummary(id, source)}
+                  </p>
+                  {source?.observed_at && (
+                    <div className="mt-3 text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
+                      Observed {new Date(source.observed_at).toLocaleString()}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
         </section>
 
         <section>
