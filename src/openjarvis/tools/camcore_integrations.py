@@ -136,8 +136,9 @@ class CamCoreBetterStackOverviewTool(BaseTool):
         return ToolSpec(
             name=self.tool_id,
             description=(
-                "Read the current CamCore Better Stack uptime monitor summary and unresolved "
-                "incidents. Returns monitor names/statuses and bounded incident metadata only."
+                "Read the current CamCore Better Stack uptime monitor "
+                "summary and unresolved incidents. Returns monitor "
+                "names/statuses and bounded incident metadata only."
             ),
             parameters={"type": "object", "properties": {}},
             category="camcore",
@@ -267,8 +268,9 @@ class CamCoreYouTrackOverviewTool(BaseTool):
         return ToolSpec(
             name=self.tool_id,
             description=(
-                "Read a bounded list of CamCore YouTrack issues using the server-configured "
-                "read query. Returns issue IDs, summaries, project, resolution state and selected fields."
+                "Read a bounded list of CamCore YouTrack issues using "
+                "the server-configured read query. Returns issue IDs, "
+                "summaries, project, resolution state and selected fields."
             ),
             parameters={"type": "object", "properties": {}},
             category="camcore",
@@ -366,15 +368,19 @@ class CamCoreHomeAssistantStateTool(BaseTool):
         return ToolSpec(
             name=self.tool_id,
             description=(
-                "Read current state for one CamCore Home Assistant entity. Only entity IDs "
-                "allow-listed server-side are accepted; location and arbitrary attributes are not returned."
+                "Read current state for one CamCore Home Assistant entity. "
+                "Only entity IDs allow-listed server-side are accepted; "
+                "location and arbitrary attributes are not returned."
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "entity_id": {
                         "type": "string",
-                        "description": "Allow-listed Home Assistant entity ID, for example sensor.example.",
+                        "description": (
+                            "Allow-listed Home Assistant entity ID, "
+                            "for example sensor.example."
+                        ),
                     }
                 },
                 "required": ["entity_id"],
@@ -395,7 +401,10 @@ class CamCoreHomeAssistantStateTool(BaseTool):
                 )
             if entity_id not in allowed:
                 raise _IntegrationRequestError(
-                    f"Home Assistant entity '{entity_id}' is not in the server-side allow-list."
+                    (
+                        f"Home Assistant entity '{entity_id}' is not in "
+                        "the server-side allow-list."
+                    )
                 )
             data = _request_json(
                 "GET",
@@ -467,8 +476,9 @@ class CamCoreM365ServiceHealthTool(BaseTool):
         return ToolSpec(
             name=self.tool_id,
             description=(
-                "Read CamCore Microsoft 365 subscribed service health and current service "
-                "issues via Microsoft Graph. Requires server-side ServiceHealth.Read.All application access."
+                "Read CamCore Microsoft 365 subscribed service health "
+                "and current service issues via Microsoft Graph. "
+                "Requires server-side ServiceHealth.Read.All application access."
             ),
             parameters={"type": "object", "properties": {}},
             category="camcore",
@@ -555,8 +565,10 @@ class CamCoreGitHubOverviewTool(BaseTool):
         return ToolSpec(
             name=self.tool_id,
             description=(
-                "Read bounded GitHub issue and Actions status for repositories allow-listed "
-                "server-side in CAMCORE_GITHUB_REPOSITORIES. No repository can be supplied by the model."
+                "Read bounded GitHub issue and Actions status for "
+                "repositories allow-listed server-side in "
+                "CAMCORE_GITHUB_REPOSITORIES. No repository can be "
+                "supplied by the model."
             ),
             parameters={"type": "object", "properties": {}},
             category="camcore",
@@ -573,7 +585,10 @@ class CamCoreGitHubOverviewTool(BaseTool):
             ]
             if not repositories:
                 raise _IntegrationConfigError(
-                    "CAMCORE_GITHUB_REPOSITORIES has no approved owner/repository entries."
+                    (
+                        "CAMCORE_GITHUB_REPOSITORIES has no approved "
+                        "owner/repository entries."
+                    )
                 )
             token = os.environ.get("CAMCORE_GITHUB_TOKEN", "").strip()
             headers = {
@@ -678,8 +693,10 @@ class CamCoreSynologyApiInventoryTool(BaseTool):
         return ToolSpec(
             name=self.tool_id,
             description=(
-                "Discover which Synology DSM WebAPI names and versions are advertised by the "
-                "configured NAS. This is capability discovery only and is not disk, SMART, RAID/SHR, volume or UPS health."
+                "Discover which Synology DSM WebAPI names and versions "
+                "are advertised by the configured NAS. This is "
+                "capability discovery only and is not disk, SMART, "
+                "RAID/SHR, volume or UPS health."
             ),
             parameters={"type": "object", "properties": {}},
             category="camcore",
@@ -727,8 +744,9 @@ class CamCoreSynologyApiInventoryTool(BaseTool):
                     "api_count": len(interesting),
                     "apis": dict(sorted(interesting.items())),
                     "warning": (
-                        "This inventory does not prove physical disk, SMART, storage-pool, "
-                        "RAID/SHR, filesystem, hardware or UPS health."
+                        "This inventory does not prove physical disk, SMART, "
+                        "storage-pool, RAID/SHR, filesystem, hardware or UPS "
+                        "health."
                     ),
                 },
             )

@@ -165,7 +165,9 @@ def build_capability_inventory(request: Request) -> list[dict[str, Any]]:
             "GitHub operations",
             available=github_read,
             source="GitHub",
-            scope="Bounded issues and Actions state for server allow-listed repositories",
+            scope=(
+                "Bounded issues and Actions state for server allow-listed repositories"
+            ),
             evidence="live-capable",
         ),
         _capability(
@@ -174,8 +176,9 @@ def build_capability_inventory(request: Request) -> list[dict[str, Any]]:
             available=tautulli_read,
             source="Tautulli",
             scope=(
-                "Aggregate current streams, transcode decisions, media types, session states "
-                "and bandwidth; no viewer or media-title identity"
+                "Aggregate current streams, transcode decisions, "
+                "media types, session states and bandwidth; "
+                "no viewer or media-title identity"
             ),
             evidence="live-capable",
         ),
@@ -192,7 +195,10 @@ def build_capability_inventory(request: Request) -> list[dict[str, Any]]:
             "Synology storage health",
             available=False,
             source="Synology DSM",
-            scope="Storage pools, volumes, SMART, hardware and UPS require a documented dedicated source",
+            scope=(
+                "Storage pools, volumes, SMART, hardware and UPS "
+                "require a documented dedicated source"
+            ),
         ),
     ]
 
@@ -355,12 +361,18 @@ async def camcore_operations_overview(request: Request):
             "state": "available",
             "evidence": "available",
             "source": "Home Assistant",
-            "detail": "Entity-scoped read capability is attached; no bulk state query is performed.",
+            "detail": (
+                "Entity-scoped read capability is attached; "
+                "no bulk state query is performed."
+            ),
         }
         if available.get("homeassistant.state.read")
         else _source_unavailable(
             "Home Assistant",
-            "No current-session allow-listed Home Assistant state capability is attached.",
+            (
+                "No current-session allow-listed Home Assistant "
+                "state capability is attached."
+            ),
         )
     )
 

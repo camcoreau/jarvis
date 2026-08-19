@@ -127,7 +127,10 @@ class CamCoreTautulliActivityTool(BaseTool):
 
             if response.is_redirect:
                 raise _TautulliRequestError(
-                    "Tautulli returned an unexpected redirect; configure the final internal origin."
+                    (
+                        "Tautulli returned an unexpected redirect; configure "
+                        "the final internal origin."
+                    )
                 )
             if response.status_code >= 400:
                 raise _TautulliRequestError(
