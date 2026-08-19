@@ -70,6 +70,7 @@ def build_capability_inventory(request: Request) -> list[dict[str, Any]]:
     homeassistant_read = "camcore_homeassistant_state" in tools
     m365_read = "camcore_m365_service_health" in tools
     github_read = "camcore_github_overview" in tools
+    tautulli_read = "camcore_tautulli_activity" in tools
     synology_discovery = "camcore_synology_api_inventory" in tools
 
     return [
@@ -148,6 +149,17 @@ def build_capability_inventory(request: Request) -> list[dict[str, Any]]:
             evidence="live-capable",
         ),
         _capability(
+            "media.status.read",
+            "CamCore Media activity",
+            available=tautulli_read,
+            source="Tautulli",
+            scope=(
+                "Aggregate current streams, transcode decisions, media types, session states "
+                "and bandwidth; no viewer or media-title identity"
+            ),
+            evidence="live-capable",
+        ),
+        _capability(
             "synology.api.discovery",
             "Synology API discovery",
             available=synology_discovery,
@@ -161,13 +173,6 @@ def build_capability_inventory(request: Request) -> list[dict[str, Any]]:
             available=False,
             source="Synology DSM",
             scope="Storage pools, volumes, SMART, hardware and UPS require a documented dedicated source",
-        ),
-        _capability(
-            "media.status.read",
-            "Media services",
-            available=False,
-            source="CamCore Media",
-            scope="Dedicated media service status and activity integration",
         ),
     ]
 
@@ -242,6 +247,7 @@ async def camcore_operations_overview(request: Request):
         CamCoreSynologyApiInventoryTool,
         CamCoreYouTrackOverviewTool,
     )
+    from openjarvis.tools.camcore_tautulli import CamCoreTautulliActivityTool
 
     read_sources = (
         (
@@ -267,6 +273,12 @@ async def camcore_operations_overview(request: Request):
             "github.operations.read",
             "GitHub",
             CamCoreGitHubOverviewTool,
+        ),
+        (
+            "tautulli",
+            "media.status.read",
+            "Tautulli",
+            CamCoreTautulliActivityTool,
         ),
         (
             "synology",
