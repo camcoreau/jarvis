@@ -80,6 +80,8 @@ CamCore production uses `trusted-proxy` mode in addition to the normal OpenJarvi
 
 `legacy` mode remains available for ordinary local/upstream OpenJarvis compatibility and does not manufacture a CamCore identity.
 
+The bundled Jarvis SPA is an administrator workspace: it uses the generic Operations agent routes. Member-facing clients must use the dedicated `/v1/camcore/portal/*` member API and must not inherit the administrator SPA's generic `/v1` surface.
+
 ## Capability truthfulness
 
 Every CamCore integration must preserve four distinct states:
@@ -113,6 +115,7 @@ Implemented read-first integrations:
 - Home Assistant — state for server allow-listed entities only.
 - Microsoft Graph — Microsoft 365 service health/issues only.
 - GitHub — bounded issue/Actions state for server allow-listed repositories.
+- Tautulli — aggregate current CamCore Media activity only; no viewer identity, IPs, titles, paths or individual viewing details.
 - Synology DSM — `SYNO.API.Info` capability discovery only.
 
 Explicitly **not** implemented as live truth yet:
@@ -122,7 +125,7 @@ Explicitly **not** implemented as live truth yet:
 - Microsoft 365 mailbox/user/device/configuration writes;
 - YouTrack writes;
 - GitHub writes;
-- dedicated media activity/control beyond other configured monitoring sources.
+- media control or individual viewing-history access.
 
 ## Integration roadmap
 
@@ -131,7 +134,7 @@ Explicitly **not** implemented as live truth yet:
 3. ~~Read-only monitoring/context foundation and evidence-labelled Operations Centre.~~
 4. ~~Microsoft 365 service-health and GitHub read context.~~
 5. ~~YouTrack/support read context and Outline documentation.~~
-6. Home Assistant read state is implemented; dedicated media status/activity remains.
+6. ~~Home Assistant allow-listed read state and aggregate CamCore Media activity.~~
 7. Portainer container control is the first approval-gated write boundary; other providers remain read-only.
 8. Scheduled monitoring and proactive operational briefings remain deliberately disabled until the access/audit model is proven in production.
 9. Add a documented/supportable Synology or host-monitoring source for storage/SMART/UPS health before exposing those facts as live observations.
