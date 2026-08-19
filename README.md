@@ -40,6 +40,8 @@ The production profile lives under [`deploy/camcore/`](deploy/camcore/).
 
 The member surface is chat-only and does not inherit the Operations agent's tools or operational memory. It may receive approved read-only CamCore knowledge excerpts, but it cannot claim to have checked live infrastructure or performed a change.
 
+The bundled Jarvis SPA is an administrator workspace. Member-facing clients use the dedicated `/v1/camcore/portal/*` API rather than the generic administrator `/v1` surface.
+
 ### Administrator / Operations
 
 CamCore production can run in `trusted-proxy` mode. The reverse proxy still authenticates to Jarvis using `OPENJARVIS_API_KEY`, while a second proxy-only shared secret protects a trusted identity envelope containing the signed-in subject and CamCore role.
@@ -87,6 +89,10 @@ Jarvis can use a dedicated Microsoft Graph application with `ServiceHealth.Read.
 
 Jarvis can read bounded issue and Actions state only for repositories listed in `CAMCORE_GITHUB_REPOSITORIES`. No repository target can be supplied by the model, and the tool contains no write operation.
 
+### CamCore Media — aggregate Tautulli activity
+
+Jarvis can read current Tautulli activity as an aggregate operational summary: total streams, transcode/direct-play/direct-stream counts, LAN/WAN counts, media-type totals, session-state totals and aggregate bandwidth. It never returns usernames, IP addresses, media titles, file paths, player identities or individual viewing history to the model.
+
 ### Synology DSM — capability discovery only
 
 Jarvis can call the documented `SYNO.API.Info` endpoint to discover API names and supported versions advertised by the configured DSM. This does **not** expose or claim physical disk, SMART, storage-pool, RAID/SHR, filesystem, hardware or UPS health.
@@ -98,7 +104,6 @@ The main remaining capability gaps are:
 1. A documented and supportable Synology/host source for volume, storage-pool, SMART, hardware and UPS health.
 2. Deeper host telemetry where Better Stack uptime checks are insufficient.
 3. Optional Microsoft 365 licensing/device/security readers, each with its own least-privilege permission boundary.
-4. Dedicated CamCore Media service activity beyond generic uptime monitoring.
 
 Any write expansion requires a separately defined approval boundary, rollback path and audit behaviour.
 
