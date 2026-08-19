@@ -285,9 +285,7 @@ async def camcore_operations_overview(request: Request):
     from openjarvis.tools.camcore_portainer import CamCorePortainerOverviewTool
     from openjarvis.tools.camcore_tautulli import CamCoreTautulliActivityTool
 
-    configured_sources: list[
-        tuple[str, str, str, Callable[[], Any]]
-    ] = [
+    configured_sources: list[tuple[str, str, str, Callable[[], Any]]] = [
         (
             "portainer",
             "docker.containers.read",

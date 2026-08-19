@@ -138,12 +138,19 @@ class CamCoreTautulliActivityTool(BaseTool):
             except ValueError as exc:
                 raise _TautulliRequestError("Tautulli returned invalid JSON.") from exc
 
-            api_response = envelope.get("response") if isinstance(envelope, dict) else None
-            if not isinstance(api_response, dict) or api_response.get("result") != "success":
+            api_response = (
+                envelope.get("response") if isinstance(envelope, dict) else None
+            )
+            if (
+                not isinstance(api_response, dict)
+                or api_response.get("result") != "success"
+            ):
                 raise _TautulliRequestError("Tautulli get_activity did not succeed.")
             data = api_response.get("data") or {}
             if not isinstance(data, dict):
-                raise _TautulliRequestError("Tautulli activity response had an invalid shape.")
+                raise _TautulliRequestError(
+                    "Tautulli activity response had an invalid shape."
+                )
             raw_sessions = data.get("sessions") or []
             sessions = [item for item in raw_sessions if isinstance(item, dict)]
 

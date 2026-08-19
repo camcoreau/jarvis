@@ -9,7 +9,9 @@ import httpx
 from openjarvis.tools.camcore_tautulli import CamCoreTautulliActivityTool
 
 
-def test_tautulli_returns_aggregate_activity_without_viewer_or_media_identity(monkeypatch):
+def test_tautulli_returns_aggregate_activity_without_viewer_or_media_identity(
+    monkeypatch,
+):
     monkeypatch.setenv("CAMCORE_TAUTULLI_URL", "http://tautulli:8181")
     monkeypatch.setenv("CAMCORE_TAUTULLI_API_KEY", "tautulli-secret")
 

@@ -17,7 +17,11 @@ import uuid
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from openjarvis.server.camcore_access import request_identity, request_role, require_admin
+from openjarvis.server.camcore_access import (
+    request_identity,
+    request_role,
+    require_admin,
+)
 from openjarvis.server.camcore_member_knowledge import build_member_knowledge_context
 from openjarvis.server.camcore_provider import provider_status, resolve_provider
 from openjarvis.server.models import (

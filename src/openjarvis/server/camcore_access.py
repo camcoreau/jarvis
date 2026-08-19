@@ -93,7 +93,9 @@ def _secrets_match(presented: str, expected: str) -> bool:
     return secrets.compare_digest(presented_bytes, expected_bytes)
 
 
-def _identity_from_headers(request: Request, expected_secret: str) -> CamCoreIdentity | None:
+def _identity_from_headers(
+    request: Request, expected_secret: str
+) -> CamCoreIdentity | None:
     presented = _safe_header(request.headers.get(_PROXY_SECRET_HEADER), limit=4096)
     if not presented or not _secrets_match(presented, expected_secret):
         return None
@@ -137,7 +139,9 @@ def require_admin(request: Request) -> None:
     if identity is None:
         raise HTTPException(status_code=401, detail="CamCore identity is required")
     if identity.role != "admin":
-        raise HTTPException(status_code=403, detail="CamCore administrator access required")
+        raise HTTPException(
+            status_code=403, detail="CamCore administrator access required"
+        )
 
 
 class CamCoreAccessMiddleware(BaseHTTPMiddleware):

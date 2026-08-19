@@ -49,7 +49,9 @@ def _required_env(*names: str) -> list[str]:
     missing = [name for name in names if not os.environ.get(name, "").strip()]
     if missing:
         raise _IntegrationConfigError(
-            "CamCore integration is not configured; set " + ", ".join(missing) + " server-side."
+            "CamCore integration is not configured; set "
+            + ", ".join(missing)
+            + " server-side."
         )
     return [os.environ[name].strip() for name in names]
 
@@ -58,9 +60,16 @@ def _configured_origin(name: str, *, allow_http: bool = False) -> str:
     value = _required_env(name)[0].rstrip("/")
     parsed = urlparse(value)
     valid_schemes = {"https"} | ({"http"} if allow_http else set())
-    if parsed.scheme not in valid_schemes or not parsed.netloc or parsed.query or parsed.fragment:
+    if (
+        parsed.scheme not in valid_schemes
+        or not parsed.netloc
+        or parsed.query
+        or parsed.fragment
+    ):
         schemes = "http/https" if allow_http else "https"
-        raise _IntegrationConfigError(f"{name} must be a fixed {schemes} origin without query or fragment.")
+        raise _IntegrationConfigError(
+            f"{name} must be a fixed {schemes} origin without query or fragment."
+        )
     return value
 
 
@@ -68,7 +77,9 @@ def _json_response(response: httpx.Response, provider: str) -> Any:
     if response.is_redirect:
         raise _IntegrationRequestError(f"{provider} returned an unexpected redirect.")
     if response.status_code >= 400:
-        raise _IntegrationRequestError(f"{provider} returned HTTP {response.status_code}.")
+        raise _IntegrationRequestError(
+            f"{provider} returned HTTP {response.status_code}."
+        )
     try:
         return response.json()
     except ValueError as exc:
@@ -95,7 +106,9 @@ def _request_json(
             follow_redirects=False,
         )
     except httpx.RequestError as exc:
-        raise _IntegrationRequestError(f"{provider} request failed: {_redact_sensitive(str(exc))}") from exc
+        raise _IntegrationRequestError(
+            f"{provider} request failed: {_redact_sensitive(str(exc))}"
+        ) from exc
     return _json_response(response, provider)
 
 
@@ -138,7 +151,11 @@ class CamCoreBetterStackOverviewTool(BaseTool):
             team = os.environ.get("CAMCORE_BETTERSTACK_TEAM", "").strip()
             headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
             monitor_params: dict[str, Any] = {"per_page": 250, "page": 1}
-            incident_params: dict[str, Any] = {"resolved": "false", "per_page": 50, "page": 1}
+            incident_params: dict[str, Any] = {
+                "resolved": "false",
+                "per_page": 50,
+                "page": 1,
+            }
             if team:
                 monitor_params["team_name"] = team
                 incident_params["team_name"] = team
@@ -159,7 +176,9 @@ class CamCoreBetterStackOverviewTool(BaseTool):
             )
 
             monitors = []
-            for item in monitors_json.get("data", []) if isinstance(monitors_json, dict) else []:
+            for item in (
+                monitors_json.get("data", []) if isinstance(monitors_json, dict) else []
+            ):
                 if not isinstance(item, dict):
                     continue
                 attributes = item.get("attributes") or {}
@@ -170,13 +189,19 @@ class CamCoreBetterStackOverviewTool(BaseTool):
                         "id": str(item.get("id") or ""),
                         "name": str(attributes.get("pronounceable_name") or "unnamed"),
                         "status": str(attributes.get("status") or "unknown"),
-                        "monitor_type": str(attributes.get("monitor_type") or "unknown"),
+                        "monitor_type": str(
+                            attributes.get("monitor_type") or "unknown"
+                        ),
                         "last_checked_at": attributes.get("last_checked_at"),
                     }
                 )
 
             incidents = []
-            for item in incidents_json.get("data", []) if isinstance(incidents_json, dict) else []:
+            for item in (
+                incidents_json.get("data", [])
+                if isinstance(incidents_json, dict)
+                else []
+            ):
                 if not isinstance(item, dict):
                     continue
                 attributes = item.get("attributes") or {}
@@ -186,7 +211,9 @@ class CamCoreBetterStackOverviewTool(BaseTool):
                     {
                         "id": str(item.get("id") or ""),
                         "name": str(attributes.get("name") or "incident")[:300],
-                        "cause": _redact_sensitive(str(attributes.get("cause") or ""))[:500],
+                        "cause": _redact_sensitive(str(attributes.get("cause") or ""))[
+                            :500
+                        ],
                         "status": str(attributes.get("status") or "unknown"),
                         "started_at": attributes.get("started_at"),
                         "acknowledged_at": attributes.get("acknowledged_at"),
@@ -253,7 +280,10 @@ class CamCoreYouTrackOverviewTool(BaseTool):
         try:
             origin = _configured_origin("CAMCORE_YOUTRACK_URL", allow_http=True)
             token = _required_env("CAMCORE_YOUTRACK_TOKEN")[0]
-            query = os.environ.get("CAMCORE_YOUTRACK_QUERY", "#Unresolved").strip() or "#Unresolved"
+            query = (
+                os.environ.get("CAMCORE_YOUTRACK_QUERY", "#Unresolved").strip()
+                or "#Unresolved"
+            )
             fields = (
                 "id,idReadable,summary,resolved,updated,project(shortName,name),"
                 "customFields(name,value(name,login,fullName,text))"
@@ -261,14 +291,26 @@ class CamCoreYouTrackOverviewTool(BaseTool):
             data = _request_json(
                 "GET",
                 f"{origin}/api/issues",
-                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/json",
+                },
                 params={"query": query, "fields": fields, "$top": 50},
                 provider="YouTrack",
             )
             if not isinstance(data, list):
-                raise _IntegrationRequestError("YouTrack issue list had an invalid shape.")
+                raise _IntegrationRequestError(
+                    "YouTrack issue list had an invalid shape."
+                )
 
-            selected_fields = {"State", "Priority", "Assignee", "Service", "Impact", "Category"}
+            selected_fields = {
+                "State",
+                "Priority",
+                "Assignee",
+                "Service",
+                "Impact",
+                "Category",
+            }
             issues = []
             for issue in data[:50]:
                 if not isinstance(issue, dict):
@@ -285,7 +327,9 @@ class CamCoreYouTrackOverviewTool(BaseTool):
                     {
                         "id": str(issue.get("idReadable") or issue.get("id") or ""),
                         "summary": str(issue.get("summary") or "")[:1_000],
-                        "project": str(project.get("shortName") or project.get("name") or ""),
+                        "project": str(
+                            project.get("shortName") or project.get("name") or ""
+                        ),
                         "resolved": issue.get("resolved") is not None,
                         "updated": issue.get("updated"),
                         "fields": custom,
@@ -356,11 +400,16 @@ class CamCoreHomeAssistantStateTool(BaseTool):
             data = _request_json(
                 "GET",
                 f"{origin}/api/states/{entity_id}",
-                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/json",
+                },
                 provider="Home Assistant",
             )
             if not isinstance(data, dict):
-                raise _IntegrationRequestError("Home Assistant state response had an invalid shape.")
+                raise _IntegrationRequestError(
+                    "Home Assistant state response had an invalid shape."
+                )
             attributes = data.get("attributes") or {}
             safe_attributes = {
                 key: attributes.get(key)
@@ -400,7 +449,9 @@ def _graph_access_token() -> str:
         provider="Microsoft identity platform",
     )
     if not isinstance(token_data, dict) or not token_data.get("access_token"):
-        raise _IntegrationRequestError("Microsoft identity platform did not return an access token.")
+        raise _IntegrationRequestError(
+            "Microsoft identity platform did not return an access token."
+        )
     return str(token_data["access_token"])
 
 
@@ -459,7 +510,9 @@ class CamCoreM365ServiceHealthTool(BaseTool):
                         }
                     )
             active_issues = []
-            for item in issues_data.get("value", []) if isinstance(issues_data, dict) else []:
+            for item in (
+                issues_data.get("value", []) if isinstance(issues_data, dict) else []
+            ):
                 if not isinstance(item, dict) or item.get("isResolved") is True:
                     continue
                 active_issues.append(
@@ -548,7 +601,12 @@ class CamCoreGitHubOverviewTool(BaseTool):
                     "GET",
                     f"https://api.github.com/repos/{encoded_repo}/issues",
                     headers=headers,
-                    params={"state": "open", "per_page": 20, "sort": "updated", "direction": "desc"},
+                    params={
+                        "state": "open",
+                        "per_page": 20,
+                        "sort": "updated",
+                        "direction": "desc",
+                    },
                     provider="GitHub",
                 )
                 runs_data = _request_json(
@@ -560,7 +618,7 @@ class CamCoreGitHubOverviewTool(BaseTool):
                 )
                 issues = []
                 for issue in issues_data if isinstance(issues_data, list) else []:
-                    if not isinstance(issue, dict) or issue.get("pull_request"):
+                    if not isinstance(issue, dict) or "pull_request" in issue:
                         continue
                     issues.append(
                         {
@@ -570,7 +628,11 @@ class CamCoreGitHubOverviewTool(BaseTool):
                         }
                     )
                 runs = []
-                for run in runs_data.get("workflow_runs", []) if isinstance(runs_data, dict) else []:
+                for run in (
+                    runs_data.get("workflow_runs", [])
+                    if isinstance(runs_data, dict)
+                    else []
+                ):
                     if isinstance(run, dict):
                         runs.append(
                             {
@@ -594,7 +656,11 @@ class CamCoreGitHubOverviewTool(BaseTool):
                 )
             return _tool_result(
                 self.tool_id,
-                {"source": "GitHub REST API", "repository_count": len(summaries), "repositories": summaries},
+                {
+                    "source": "GitHub REST API",
+                    "repository_count": len(summaries),
+                    "repositories": summaries,
+                },
             )
         except Exception as exc:
             return _tool_error(self.tool_id, exc)
@@ -627,14 +693,23 @@ class CamCoreSynologyApiInventoryTool(BaseTool):
             data = _request_json(
                 "GET",
                 f"{origin}/webapi/entry.cgi",
-                params={"api": "SYNO.API.Info", "version": 1, "method": "query", "query": "all"},
+                params={
+                    "api": "SYNO.API.Info",
+                    "version": 1,
+                    "method": "query",
+                    "query": "all",
+                },
                 provider="Synology DSM",
             )
             if not isinstance(data, dict) or data.get("success") is not True:
-                raise _IntegrationRequestError("Synology DSM API discovery did not succeed.")
+                raise _IntegrationRequestError(
+                    "Synology DSM API discovery did not succeed."
+                )
             raw = data.get("data") or {}
             if not isinstance(raw, dict):
-                raise _IntegrationRequestError("Synology DSM API inventory had an invalid shape.")
+                raise _IntegrationRequestError(
+                    "Synology DSM API inventory had an invalid shape."
+                )
             interesting = {}
             prefixes = ("SYNO.API.", "SYNO.Core.", "SYNO.Storage.")
             for name, details in raw.items():

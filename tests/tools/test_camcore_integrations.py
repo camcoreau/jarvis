@@ -17,7 +17,9 @@ from openjarvis.tools.camcore_integrations import (
 
 
 def _response(data, status: int = 200) -> httpx.Response:
-    return httpx.Response(status, json=data, request=httpx.Request("GET", "https://example.test"))
+    return httpx.Response(
+        status, json=data, request=httpx.Request("GET", "https://example.test")
+    )
 
 
 def test_betterstack_returns_bounded_monitor_and_incident_fields(monkeypatch):
@@ -37,7 +39,9 @@ def test_betterstack_returns_bounded_monitor_and_incident_fields(monkeypatch):
                                 "monitor_type": "status",
                                 "last_checked_at": "2026-08-19T10:00:00Z",
                                 "url": "https://private.example",
-                                "request_headers": [{"name": "X-Secret", "value": "nope"}],
+                                "request_headers": [
+                                    {"name": "X-Secret", "value": "nope"}
+                                ],
                             },
                         }
                     ],
@@ -90,7 +94,10 @@ def test_youtrack_returns_only_selected_operational_fields(monkeypatch):
                     "project": {"shortName": "OPS", "name": "Operations"},
                     "customFields": [
                         {"name": "Priority", "value": {"name": "Major"}},
-                        {"name": "SensitiveInternalField", "value": {"text": "not returned"}},
+                        {
+                            "name": "SensitiveInternalField",
+                            "value": {"text": "not returned"},
+                        },
                     ],
                 }
             ]
@@ -168,7 +175,15 @@ def test_m365_uses_client_credentials_but_never_returns_token(monkeypatch):
             return _response({"access_token": "graph-access-token"})
         if url.endswith("/healthOverviews"):
             return _response(
-                {"value": [{"id": "Exchange", "service": "Exchange Online", "status": "serviceOperational"}]}
+                {
+                    "value": [
+                        {
+                            "id": "Exchange",
+                            "service": "Exchange Online",
+                            "status": "serviceOperational",
+                        }
+                    ]
+                }
             )
         return _response(
             {
@@ -209,8 +224,17 @@ def test_github_is_server_allowlisted_and_filters_pull_requests(monkeypatch):
         if url.endswith("/issues"):
             return _response(
                 [
-                    {"number": 1, "title": "Issue", "updated_at": "2026-08-19T10:00:00Z"},
-                    {"number": 2, "title": "PR", "pull_request": {}, "updated_at": "2026-08-19T10:00:00Z"},
+                    {
+                        "number": 1,
+                        "title": "Issue",
+                        "updated_at": "2026-08-19T10:00:00Z",
+                    },
+                    {
+                        "number": 2,
+                        "title": "PR",
+                        "pull_request": {},
+                        "updated_at": "2026-08-19T10:00:00Z",
+                    },
                 ]
             )
         if url.endswith("/actions/runs"):
@@ -255,9 +279,21 @@ def test_synology_inventory_never_claims_storage_health(monkeypatch):
             {
                 "success": True,
                 "data": {
-                    "SYNO.API.Auth": {"minVersion": 1, "maxVersion": 7, "path": "entry.cgi"},
-                    "SYNO.Storage.CGI.Storage": {"minVersion": 1, "maxVersion": 1, "path": "entry.cgi"},
-                    "SYNO.FileStation.List": {"minVersion": 1, "maxVersion": 2, "path": "entry.cgi"},
+                    "SYNO.API.Auth": {
+                        "minVersion": 1,
+                        "maxVersion": 7,
+                        "path": "entry.cgi",
+                    },
+                    "SYNO.Storage.CGI.Storage": {
+                        "minVersion": 1,
+                        "maxVersion": 1,
+                        "path": "entry.cgi",
+                    },
+                    "SYNO.FileStation.List": {
+                        "minVersion": 1,
+                        "maxVersion": 2,
+                        "path": "entry.cgi",
+                    },
                 },
             }
         ),

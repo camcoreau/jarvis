@@ -43,6 +43,7 @@ not configured or unavailable, say exactly which capability is unavailable
 instead of inventing results.
 
 Integration boundaries:
+Portainer capability boundary:
 - Portainer provides Docker-only live access: environments, container state and
   Docker health, container CPU/memory/network statistics, redacted recent logs,
   and confirmation-gated container start/stop/restart actions.

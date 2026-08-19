@@ -18,7 +18,9 @@ from openjarvis.server.camcore_access import (
     CamCoreAccessMiddleware,
     access_mode,
 )
-from openjarvis.server.camcore_operations_routes import router as camcore_operations_router
+from openjarvis.server.camcore_operations_routes import (
+    router as camcore_operations_router,
+)
 from openjarvis.server.camcore_portal_routes import router as camcore_portal_router
 from openjarvis.server.comparison import comparison_router
 from openjarvis.server.connectors_router import create_connectors_router
