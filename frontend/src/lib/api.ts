@@ -44,7 +44,7 @@ export async function saveCloudKey(keyName: string, keyValue: string): Promise<v
 // source of truth for JARVIS_PORT.
 let _tauriApiBase: string | null = null;
 
-/** Pre-fetch the API base URL from the Tauri backend (call once at init). */
+/** Pre-fetch the API base URL from the Tauri backend at startup. */
 export async function initApiBase(): Promise<void> {
   if (!isTauri()) return;
   try {
@@ -220,11 +220,15 @@ export async function deleteModel(modelName: string): Promise<void> {
 const _CLOUD_PREFIXES = ['gpt-', 'o1-', 'o3-', 'o4-', 'claude-', 'gemini-', 'openrouter/'];
 
 export async function preloadModel(modelName: string, owner?: string): Promise<void> {
-  // Cloud models don't need Ollama preloading
+  // Cloud models don't need Ollama preloading.
   if (owner === 'litellm' || _CLOUD_PREFIXES.some(p => modelName.startsWith(p))) {
     return;
   }
-  // Trigger Ollama to load the model into memory (empty prompt, no generation).
+  // Preloading is a desktop-only optimisation. In web/server mode, 127.0.0.1
+  // belongs to the browser client rather than the Jarvis host and must never be
+  // contacted for model management. The server/deployment path owns Ollama.
+  if (!isTauri()) return;
+
   const ollamaUrl = 'http://127.0.0.1:11434';
   try {
     const res = await fetch(`${ollamaUrl}/api/generate`, {
@@ -541,18 +545,15 @@ export async function bindAgentChannel(
   channelType: string,
   config?: Record<string, unknown>,
 ): Promise<ChannelBinding> {
-  const res = await fetch(
-    `${getBase()}/v1/managed-agents/${agentId}/channels`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        channel_type: channelType,
-        config: config || {},
-        routing_mode: 'dedicated',
-      }),
-    },
-  );
+  const res = await apiFetch(`/v1/managed-agents/${agentId}/channels`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      channel_type: channelType,
+      config: config || {},
+      routing_mode: 'dedicated',
+    }),
+  });
   if (!res.ok) throw new Error(`Failed: ${res.status}`);
   return res.json();
 }
@@ -561,8 +562,8 @@ export async function unbindAgentChannel(
   agentId: string,
   bindingId: string,
 ): Promise<void> {
-  const res = await fetch(
-    `${getBase()}/v1/managed-agents/${agentId}/channels/${bindingId}`,
+  const res = await apiFetch(
+    `/v1/managed-agents/${agentId}/channels/${bindingId}`,
     { method: 'DELETE' },
   );
   if (!res.ok) throw new Error(`Failed: ${res.status}`);
