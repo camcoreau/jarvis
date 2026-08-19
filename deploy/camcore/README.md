@@ -39,6 +39,8 @@ Jarvis trusts those headers **only** when `X-CamCore-Proxy-Secret` matches the r
 
 A trusted `member` identity is restricted server-side to the member-safe CamCore portal routes. It cannot reach generic OpenJarvis `/v1` APIs, Operations APIs, agent management, approvals, model management or other administrator surfaces.
 
+The bundled Jarvis SPA is an administrator workspace and uses the generic Operations agent API. A member-facing site should use the dedicated `/v1/camcore/portal/*` member API rather than embedding the administrator SPA.
+
 ### Administrator boundary
 
 A trusted `admin` identity can reach the private administrator UI and explicitly protected Operations APIs. Modifying tools still enforce their own confirmation and capability requirements after authentication.
@@ -133,12 +135,31 @@ The tool reads subscribed service health and current service issues. It does not
 
 ```dotenv
 CAMCORE_GITHUB_REPOSITORIES=camcoreau/jarvis,camcoreau/camcore-websites
-CAMCORE_GITHUB_TOKEN=<optional read-only fine-grained token>
+CAMCORE_GITHUB_TOKEN=<read-only fine-grained token>
 ```
 
-The tool reads bounded open-issue and GitHub Actions state only for repositories listed in `CAMCORE_GITHUB_REPOSITORIES`. Public repositories can work without a token; use a fine-grained read-only token for private repositories or to avoid anonymous rate limits.
+The tool reads bounded open-issue and GitHub Actions state only for repositories listed in `CAMCORE_GITHUB_REPOSITORIES`. Use a fine-grained read-only token so Operations does not depend on low anonymous API rate limits and can cover private repositories where required.
 
 No repository target can be supplied by the model.
+
+### CamCore Media — aggregate Tautulli activity
+
+```dotenv
+CAMCORE_TAUTULLI_URL=<internal Tautulli origin>
+CAMCORE_TAUTULLI_API_KEY=<Tautulli API key>
+```
+
+Jarvis calls Tautulli's `get_activity` command but converts the session-rich response into aggregate operational evidence before it reaches the model. Returned data is limited to:
+
+- current stream count;
+- transcode/direct-play/direct-stream counts;
+- LAN/WAN stream counts;
+- aggregate bandwidth;
+- media-type counts;
+- transcode-decision counts;
+- playing/paused session-state counts.
+
+Jarvis does **not** return Tautulli usernames, IP addresses, player identities, media titles, file paths or individual viewing history.
 
 ### Synology DSM — API discovery only
 
@@ -261,6 +282,7 @@ Expected results:
 - capability inventory distinguishes attached capabilities from unavailable ones;
 - each configured Operations source reports `LIVE` only after a successful current provider request;
 - unconfigured optional integrations report a configuration error without taking down the rest of Operations;
+- CamCore Media reports aggregate-only Tautulli activity and no viewer/media identity;
 - Synology reports capability discovery and explicitly does not claim storage health.
 
 A request sent through a trusted **member** path should receive HTTP 403 for `/v1/models` and `/v1/camcore/operations/*`, while `/v1/camcore/portal/chat/completions` remains available.
@@ -271,7 +293,7 @@ Verify startup logs also report the expected Outline tool discovery.
 
 Change `CAMCORE_JARVIS_MODEL` in Portainer and redeploy. The model-init service pulls the selected model before Jarvis starts.
 
-The remote web UI must not expose Ollama directly. Ollama remains an internal service and should load models through the server/deployment path rather than a browser request to `127.0.0.1:11434`.
+The remote web UI never preloads through client-local Ollama. Model preload is a desktop/Tauri-only optimisation; the server/deployment path owns Ollama in web mode.
 
 ## Rollback
 
@@ -302,6 +324,7 @@ The CamCore production profile is deliberately conservative:
 - Outline read-only knowledge access;
 - Portainer allow-listed Docker evidence;
 - Better Stack, YouTrack, Home Assistant, M365 and GitHub integrations are read-only and fixed-target/allow-listed;
+- CamCore Media uses aggregate-only Tautulli activity;
 - Synology DSM integration is discovery-only, not storage-health telemetry;
 - write/shell tools disabled by default;
 - server/block security profile;
