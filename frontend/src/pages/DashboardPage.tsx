@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Server,
   ShieldCheck,
+  Tv,
 } from 'lucide-react';
 import {
   fetchCamCoreOperationsOverview,
@@ -95,6 +96,11 @@ function sourceSummary(id: string, source?: CamCoreOperationsSource): string {
     const repositories = numeric(data, 'repository_count');
     if (repositories !== null) return `${repositories} allow-listed repositories observed`;
   }
+  if (id === 'tautulli') {
+    const streams = numeric(data, 'stream_count');
+    const transcodes = numeric(data, 'transcode_count');
+    if (streams !== null && transcodes !== null) return `${streams} active streams · ${transcodes} transcoding · aggregate-only privacy`;
+  }
   if (id === 'synology') {
     const apis = numeric(data, 'api_count');
     if (apis !== null) return `${apis} advertised DSM APIs discovered · not storage health`;
@@ -147,6 +153,7 @@ export function DashboardPage() {
     { id: 'youtrack', label: 'YouTrack', icon: ListChecks },
     { id: 'm365', label: 'Microsoft 365', icon: Cloud },
     { id: 'github', label: 'GitHub', icon: GitBranch },
+    { id: 'tautulli', label: 'CamCore Media', icon: Tv },
     { id: 'homeassistant', label: 'Home Assistant', icon: House },
     { id: 'synology', label: 'Synology DSM', icon: HardDrive },
   ];
