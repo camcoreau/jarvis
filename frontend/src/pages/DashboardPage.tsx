@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
   AlertTriangle,
@@ -77,6 +78,12 @@ export function DashboardPage() {
     }),
     [environments, overview],
   );
+  const metrics: Array<{ label: string; value: number; icon: LucideIcon }> = [
+    { label: 'Environments', value: environments.length, icon: Server },
+    { label: 'Containers running', value: totals.running, icon: Boxes },
+    { label: 'Unhealthy', value: totals.unhealthy, icon: Activity },
+    { label: 'Capabilities available', value: totals.capabilities, icon: ShieldCheck },
+  ];
 
   return (
     <div className="flex-1 overflow-y-auto px-6 py-8">
@@ -120,23 +127,15 @@ export function DashboardPage() {
         )}
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-          {[
-            ['Environments', environments.length, Server],
-            ['Containers running', totals.running, Boxes],
-            ['Unhealthy', totals.unhealthy, Activity],
-            ['Capabilities available', totals.capabilities, ShieldCheck],
-          ].map(([label, value, Icon]) => {
-            const MetricIcon = Icon as typeof Server;
-            return (
-              <div key={String(label)} className="rounded-2xl p-4" style={{ border: '1px solid var(--color-border)', background: 'rgba(255,255,255,.018)' }}>
-                <div className="flex items-center justify-between gap-3 mb-3">
-                  <span className="text-[11px] font-semibold" style={{ color: 'var(--color-text-tertiary)' }}>{String(label)}</span>
-                  <MetricIcon size={15} style={{ color: 'var(--color-accent)' }} />
-                </div>
-                <div className="text-2xl font-semibold" style={{ color: 'var(--color-text)' }}>{String(value)}</div>
+          {metrics.map(({ label, value, icon: MetricIcon }) => (
+            <div key={label} className="rounded-2xl p-4" style={{ border: '1px solid var(--color-border)', background: 'rgba(255,255,255,.018)' }}>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <span className="text-[11px] font-semibold" style={{ color: 'var(--color-text-tertiary)' }}>{label}</span>
+                <MetricIcon size={15} style={{ color: 'var(--color-accent)' }} />
               </div>
-            );
-          })}
+              <div className="text-2xl font-semibold" style={{ color: 'var(--color-text)' }}>{value}</div>
+            </div>
+          ))}
         </div>
 
         <section className="mb-6 rounded-2xl overflow-hidden" style={{ border: '1px solid var(--color-border)', background: 'rgba(255,255,255,.015)' }}>
