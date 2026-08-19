@@ -66,7 +66,13 @@ CAMCORE_OUTLINE_API_KEY=<read-only Outline API key>
 CAMCORE_TZ=Australia/Melbourne
 ```
 
-Optional Portainer live Docker integration:
+Generate the two Jarvis/proxy secrets independently. Do not reuse the Portainer, Outline or provider credentials.
+
+## 2. Optional read-only Operations integrations
+
+A blank optional credential does not prevent Jarvis from starting. The corresponding tool remains visible as an available capability but returns a precise server-side configuration error until configured. This preserves capability truthfulness without making optional services hard dependencies.
+
+### Portainer — Docker only
 
 ```dotenv
 CAMCORE_PORTAINER_URL=<internal Portainer API origin>
@@ -74,7 +80,86 @@ CAMCORE_PORTAINER_API_KEY=<Portainer access token>
 CAMCORE_PORTAINER_VERIFY_TLS=true
 ```
 
-Optional OpenAI hybrid inference:
+Portainer provides environments, allow-listed container state/health, resource statistics, bounded/redacted logs, and confirmation-gated start/stop/restart. It is not evidence for Synology storage or host health.
+
+### Better Stack — uptime and active incidents
+
+```dotenv
+CAMCORE_BETTERSTACK_API_TOKEN=<Uptime API token>
+CAMCORE_BETTERSTACK_TEAM=<optional team name>
+```
+
+The tool returns monitor names/statuses, last check time, status counts and bounded unresolved incident metadata. It deliberately omits monitored URLs, request headers, response bodies and other raw monitor configuration.
+
+Use a token that can read the required Uptime resources and nothing more than necessary.
+
+### YouTrack — read-only operational work
+
+```dotenv
+CAMCORE_YOUTRACK_URL=https://tasks.camcore.network
+CAMCORE_YOUTRACK_TOKEN=<read-only/service token>
+CAMCORE_YOUTRACK_QUERY=#Unresolved
+```
+
+Jarvis requests at most 50 issues matching the server-configured query and returns only the issue ID, summary, project, resolution/update state and the allow-listed operational fields `State`, `Priority`, `Assignee`, `Service`, `Impact` and `Category` when present.
+
+The model cannot supply a YouTrack URL, token or arbitrary search query.
+
+### Home Assistant — explicit entity allow-list
+
+```dotenv
+CAMCORE_HOMEASSISTANT_URL=https://home.camcore.network
+CAMCORE_HOMEASSISTANT_TOKEN=<long-lived access token>
+CAMCORE_HOMEASSISTANT_ENTITIES=sensor.example,binary_sensor.example
+```
+
+Jarvis can request only entity IDs in `CAMCORE_HOMEASSISTANT_ENTITIES`. Returned attributes are limited to `friendly_name`, `unit_of_measurement` and `device_class`; arbitrary attributes and location data are not returned.
+
+Do not add person/device trackers or location-sensitive entities unless there is a specific operational requirement.
+
+### Microsoft 365 — service health only
+
+```dotenv
+CAMCORE_M365_TENANT_ID=<tenant id>
+CAMCORE_M365_CLIENT_ID=<app registration client id>
+CAMCORE_M365_CLIENT_SECRET=<client secret>
+```
+
+Create a dedicated Entra application with only the Microsoft Graph application permission required for service communications: `ServiceHealth.Read.All`, with administrator consent. Jarvis uses the client-credentials flow and requests `https://graph.microsoft.com/.default` server-side.
+
+The tool reads subscribed service health and current service issues. It does not read mail, files, users, devices or configuration and has no write method.
+
+### GitHub — repository allow-list
+
+```dotenv
+CAMCORE_GITHUB_REPOSITORIES=camcoreau/jarvis,camcoreau/camcore-websites
+CAMCORE_GITHUB_TOKEN=<optional read-only fine-grained token>
+```
+
+The tool reads bounded open-issue and GitHub Actions state only for repositories listed in `CAMCORE_GITHUB_REPOSITORIES`. Public repositories can work without a token; use a fine-grained read-only token for private repositories or to avoid anonymous rate limits.
+
+No repository target can be supplied by the model.
+
+### Synology DSM — API discovery only
+
+```dotenv
+CAMCORE_SYNOLOGY_URL=<fixed DSM origin>
+```
+
+Jarvis calls only the documented `SYNO.API.Info` discovery endpoint and returns advertised `SYNO.API.*`, `SYNO.Core.*` and `SYNO.Storage.*` API names/versions. This is capability discovery, not an authenticated storage-health integration.
+
+It must not be used as evidence for:
+
+- physical disk or SMART state;
+- storage-pool health;
+- RAID/SHR layout or health;
+- filesystem free space;
+- NAS hardware health;
+- UPS state.
+
+Those remain unavailable until a documented, supportable read-only source is implemented.
+
+## 3. Optional OpenAI hybrid inference
 
 ```dotenv
 OPENAI_API_KEY=
@@ -86,11 +171,9 @@ CAMCORE_MEMBER_AUTO_PROVIDER=local
 CAMCORE_ADMIN_AUTO_PROVIDER=local
 ```
 
-`Auto` is local-first. OpenAI remains an explicit option when configured.
+`Auto` is local-first. OpenAI remains an explicit option when configured. See `OPENAI.md` for the provider boundary and rollback procedure.
 
-Generate the two Jarvis/proxy secrets independently. Do not reuse the Portainer or Outline credential.
-
-## 2. Portainer Git stack
+## 4. Portainer Git stack
 
 Use:
 
@@ -103,7 +186,7 @@ Use:
 
 The compose file intentionally relies on named volumes and the immutable image rather than bind-mounting Portainer's temporary Git checkout.
 
-## 3. Reverse proxy configuration
+## 5. Reverse proxy configuration
 
 Create the private proxy host:
 
@@ -116,7 +199,7 @@ Create the private proxy host:
 
 The browser UI loads as static content, but API requests need the server-side headers.
 
-For the administrator-only private host, the `/` custom location must inject the Jarvis API key and the proxy identity secret. If a verified SSO/access layer is supplying user claims, map those verified values into the CamCore identity headers. Otherwise a static interim administrator identity can be used only on an already administrator-restricted private host.
+For the administrator-only private host, the `/` custom location must inject the Jarvis API key and proxy identity secret. If a verified SSO/access layer is supplying user claims, map those verified values into the CamCore identity headers. Otherwise a static interim administrator identity can be used only on an already administrator-restricted private host.
 
 Example **interim private-admin** NPM location configuration:
 
@@ -137,7 +220,7 @@ When SSO claim forwarding is added, replace the static subject/display name/role
 
 The two secret-bearing headers must exist only in Portainer/NPM or another trusted runtime secret store, never in the browser bundle or repository.
 
-## 4. Outline knowledge access
+## 6. Outline knowledge access
 
 Jarvis connects to Outline over the internal Docker bridge:
 
@@ -154,33 +237,11 @@ Tool discovery is restricted to:
 
 Documentation is authoritative for **documented state**, not current runtime health.
 
-## 5. Portainer Operations boundary
-
-Portainer provides Docker-only evidence:
-
-- environments;
-- container state and Docker health;
-- allow-listed container metadata;
-- CPU, memory and network usage;
-- bounded, redacted recent logs;
-- confirmation-gated start/stop/restart actions.
-
-Portainer does **not** prove:
-
-- Synology physical disk or SMART state;
-- storage-pool health;
-- RAID/SHR layout or health;
-- filesystem free space;
-- NAS hardware health;
-- UPS state.
-
-The Operations capability inventory intentionally reports those host/storage capabilities as unavailable until a dedicated read-only source is implemented.
-
-## 6. Internal DNS
+## 7. Internal DNS
 
 Create only the internal DNS record for `jarvis.camcore.network` and point it to the private reverse-proxy path. Keep the administrator UI off public DNS.
 
-## 7. Verify deployment
+## 8. Verify deployment
 
 From an administrator client on the trusted private path:
 
@@ -196,9 +257,11 @@ Expected results:
 
 - the UI loads;
 - `/v1/models` succeeds for the admin identity;
-- `/identity` reports `admin` and the trusted proxy identity metadata;
-- capability inventory reports attached tools without inventing unavailable integrations;
-- Operations overview reports `LIVE` Portainer evidence only after a successful Portainer check.
+- `/identity` reports `admin` and trusted proxy identity metadata;
+- capability inventory distinguishes attached capabilities from unavailable ones;
+- each configured Operations source reports `LIVE` only after a successful current provider request;
+- unconfigured optional integrations report a configuration error without taking down the rest of Operations;
+- Synology reports capability discovery and explicitly does not claim storage health.
 
 A request sent through a trusted **member** path should receive HTTP 403 for `/v1/models` and `/v1/camcore/operations/*`, while `/v1/camcore/portal/chat/completions` remains available.
 
@@ -238,6 +301,8 @@ The CamCore production profile is deliberately conservative:
 - external analytics disabled;
 - Outline read-only knowledge access;
 - Portainer allow-listed Docker evidence;
+- Better Stack, YouTrack, Home Assistant, M365 and GitHub integrations are read-only and fixed-target/allow-listed;
+- Synology DSM integration is discovery-only, not storage-health telemetry;
 - write/shell tools disabled by default;
 - server/block security profile;
 - secret and PII scanning;
