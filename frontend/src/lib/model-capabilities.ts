@@ -1,21 +1,35 @@
-const EMBED_ONLY_PATTERNS = [
-  /embed/i,
-  /embedding/i,
-  /nomic-embed/i,
-  /bge-[a-z0-9-]*-?embedding/i,
-  /e5-[a-z0-9-]*-?embedding/i,
+const EMBEDDING_MODEL_PREFIXES = [
+  'all-minilm',
+  'bge-',
+  'bge_',
+  'e5-',
+  'e5_',
+  'gte-',
+  'gte_',
+  'jina-embeddings',
+  'nomic-bert',
+  'sentence-transformers',
 ];
 
 const CLOUD_PROVIDERS: Array<[RegExp, string]> = [
-  [/^(gpt-|o1-|o3-|o4-)/i, 'OpenAI'],
+  [/^(gpt-|chatgpt-|o1(?:-|$)|o3(?:-|$)|o4(?:-|$))/i, 'OpenAI'],
   [/^claude-/i, 'Anthropic'],
   [/^gemini-/i, 'Google'],
   [/^openrouter\//i, 'OpenRouter'],
 ];
 
+function modelLeaf(modelId: string | null | undefined): string {
+  const name = (modelId ?? '').trim().toLowerCase();
+  return name.slice(name.lastIndexOf('/') + 1).split(':')[0];
+}
+
 export function isEmbedOnlyModel(modelId: string | null | undefined): boolean {
-  const value = (modelId ?? '').trim();
-  return value.length > 0 && EMBED_ONLY_PATTERNS.some((pattern) => pattern.test(value));
+  const leaf = modelLeaf(modelId);
+  return (
+    leaf.includes('embed') ||
+    leaf.includes('minilm') ||
+    EMBEDDING_MODEL_PREFIXES.some((prefix) => leaf.startsWith(prefix))
+  );
 }
 
 export function cloudProvider(modelId: string | null | undefined): string | null {
