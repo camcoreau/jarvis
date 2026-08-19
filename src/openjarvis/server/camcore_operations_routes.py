@@ -2,7 +2,7 @@
 
 These endpoints expose only deliberately safe operational summaries. They do not
 return credentials, connector URLs, raw tool schemas, environment variables or
-arbitrary Docker inspect payloads.
+arbitrary provider payloads.
 """
 
 from __future__ import annotations
@@ -65,6 +65,12 @@ def build_capability_inventory(request: Request) -> list[dict[str, Any]]:
     portainer_read = "camcore_portainer_overview" in tools
     portainer_logs = "camcore_portainer_container_logs" in tools
     portainer_control = "camcore_portainer_container_action" in tools
+    betterstack_read = "camcore_betterstack_overview" in tools
+    youtrack_read = "camcore_youtrack_overview" in tools
+    homeassistant_read = "camcore_homeassistant_state" in tools
+    m365_read = "camcore_m365_service_health" in tools
+    github_read = "camcore_github_overview" in tools
+    synology_discovery = "camcore_synology_api_inventory" in tools
 
     return [
         _capability(
@@ -102,48 +108,98 @@ def build_capability_inventory(request: Request) -> list[dict[str, Any]]:
             requires_confirmation=True,
         ),
         _capability(
-            "synology.storage.read",
-            "Synology storage health",
-            available=False,
-            source="Synology DSM",
-            scope="Storage pools, volumes, SMART, hardware and UPS",
-        ),
-        _capability(
             "monitoring.health.read",
             "Infrastructure monitoring",
-            available=False,
-            source="Monitoring",
-            scope="Host and service health outside Docker",
+            available=betterstack_read,
+            source="Better Stack",
+            scope="Configured uptime monitor state and unresolved incidents",
+            evidence="live-capable",
         ),
         _capability(
-            "m365.operations.read",
-            "Microsoft 365 operations",
-            available=False,
-            source="Microsoft 365",
-            scope="Service health, licensing, devices and security summaries",
+            "m365.servicehealth.read",
+            "Microsoft 365 service health",
+            available=m365_read,
+            source="Microsoft Graph",
+            scope="Subscribed service health and current service issues only",
+            evidence="live-capable",
         ),
         _capability(
             "youtrack.operations.read",
             "YouTrack operations",
-            available=False,
+            available=youtrack_read,
             source="YouTrack",
-            scope="Tasks, support and operational work",
+            scope="Bounded read-only issue/work context using the configured query",
+            evidence="live-capable",
         ),
         _capability(
             "homeassistant.state.read",
             "Home Assistant state",
-            available=False,
+            available=homeassistant_read,
             source="Home Assistant",
-            scope="Approved entity state only",
+            scope="Current state for server allow-listed entity IDs only",
+            evidence="live-capable",
+        ),
+        _capability(
+            "github.operations.read",
+            "GitHub operations",
+            available=github_read,
+            source="GitHub",
+            scope="Bounded issues and Actions state for server allow-listed repositories",
+            evidence="live-capable",
+        ),
+        _capability(
+            "synology.api.discovery",
+            "Synology API discovery",
+            available=synology_discovery,
+            source="Synology DSM",
+            scope="Advertised DSM API names and versions only",
+            evidence="live-capable",
+        ),
+        _capability(
+            "synology.storage.read",
+            "Synology storage health",
+            available=False,
+            source="Synology DSM",
+            scope="Storage pools, volumes, SMART, hardware and UPS require a documented dedicated source",
         ),
         _capability(
             "media.status.read",
             "Media services",
             available=False,
             source="CamCore Media",
-            scope="Service status and activity",
+            scope="Dedicated media service status and activity integration",
         ),
     ]
+
+
+def _source_unavailable(source_name: str, detail: str) -> dict[str, Any]:
+    return {
+        "state": "unavailable",
+        "evidence": "unavailable",
+        "source": source_name,
+        "detail": detail[:2_000],
+    }
+
+
+def _source_from_result(source_name: str, result: Any) -> dict[str, Any]:
+    if not getattr(result, "success", False):
+        return {
+            "state": "error",
+            "evidence": "unavailable",
+            "source": source_name,
+            "detail": str(getattr(result, "content", "Live check failed"))[:2_000],
+        }
+    try:
+        data = json.loads(result.content)
+    except (TypeError, ValueError):
+        data = {"detail": f"{source_name} returned an unreadable safe summary."}
+    return {
+        "state": "live",
+        "evidence": "live",
+        "source": source_name,
+        "observed_at": datetime.now(timezone.utc).isoformat(),
+        "data": data,
+    }
 
 
 @router.get("/capabilities")
@@ -159,48 +215,94 @@ async def camcore_operations_capabilities(request: Request):
 
 @router.get("/overview")
 async def camcore_operations_overview(request: Request):
-    """Return live Docker overview when the approved Portainer tool is attached."""
+    """Return live evidence from configured read-only CamCore integrations."""
 
     require_admin(request)
     capabilities = build_capability_inventory(request)
-    portainer_capability = next(
-        item for item in capabilities if item["id"] == "docker.containers.read"
-    )
-    source: dict[str, Any]
-    if not portainer_capability["available"]:
-        source = {
-            "state": "unavailable",
-            "evidence": "unavailable",
-            "source": "Portainer",
-            "detail": "No current-session Portainer container read capability is attached.",
-        }
-    else:
+    available = {item["id"]: bool(item["available"]) for item in capabilities}
+    sources: dict[str, dict[str, Any]] = {}
+
+    if available.get("docker.containers.read"):
         from openjarvis.tools.camcore_portainer import CamCorePortainerOverviewTool
 
-        result = CamCorePortainerOverviewTool().execute(include_stopped=True)
-        if result.success:
-            try:
-                data = json.loads(result.content)
-            except (TypeError, ValueError):
-                data = {"detail": "Portainer returned an unreadable safe summary."}
-            source = {
-                "state": "live",
-                "evidence": "live",
-                "source": "Portainer",
-                "observed_at": datetime.now(timezone.utc).isoformat(),
-                "data": data,
-            }
+        sources["portainer"] = _source_from_result(
+            "Portainer",
+            CamCorePortainerOverviewTool().execute(include_stopped=True),
+        )
+    else:
+        sources["portainer"] = _source_unavailable(
+            "Portainer",
+            "No current-session Portainer container read capability is attached.",
+        )
+
+    from openjarvis.tools.camcore_integrations import (
+        CamCoreBetterStackOverviewTool,
+        CamCoreGitHubOverviewTool,
+        CamCoreM365ServiceHealthTool,
+        CamCoreSynologyApiInventoryTool,
+        CamCoreYouTrackOverviewTool,
+    )
+
+    read_sources = (
+        (
+            "betterstack",
+            "monitoring.health.read",
+            "Better Stack",
+            CamCoreBetterStackOverviewTool,
+        ),
+        (
+            "youtrack",
+            "youtrack.operations.read",
+            "YouTrack",
+            CamCoreYouTrackOverviewTool,
+        ),
+        (
+            "m365",
+            "m365.servicehealth.read",
+            "Microsoft 365",
+            CamCoreM365ServiceHealthTool,
+        ),
+        (
+            "github",
+            "github.operations.read",
+            "GitHub",
+            CamCoreGitHubOverviewTool,
+        ),
+        (
+            "synology",
+            "synology.api.discovery",
+            "Synology DSM",
+            CamCoreSynologyApiInventoryTool,
+        ),
+    )
+    for source_id, capability_id, source_name, tool_class in read_sources:
+        if available.get(capability_id):
+            sources[source_id] = _source_from_result(source_name, tool_class().execute())
         else:
-            source = {
-                "state": "error",
-                "evidence": "unavailable",
-                "source": "Portainer",
-                "detail": str(result.content or "Portainer live check failed")[:2000],
-            }
+            sources[source_id] = _source_unavailable(
+                source_name,
+                f"No current-session {source_name} read capability is attached.",
+            )
+
+    # Home Assistant is deliberately entity-scoped: the overview does not bulk
+    # enumerate states because that could expose unrelated household context.
+    sources["homeassistant"] = (
+        {
+            "state": "available",
+            "evidence": "available",
+            "source": "Home Assistant",
+            "detail": "Entity-scoped read capability is attached; no bulk state query is performed.",
+        }
+        if available.get("homeassistant.state.read")
+        else _source_unavailable(
+            "Home Assistant",
+            "No current-session allow-listed Home Assistant state capability is attached.",
+        )
+    )
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "sources": {"portainer": source},
+        "sources": sources,
         "capabilities": capabilities,
     }
 
