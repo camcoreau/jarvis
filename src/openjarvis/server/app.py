@@ -13,6 +13,13 @@ from fastapi.staticfiles import StaticFiles
 
 from openjarvis.server.analytics_routes import router as analytics_router
 from openjarvis.server.api_routes import include_all_routes
+from openjarvis.server.camcore_access import (
+    ACCESS_MODE_TRUSTED_PROXY,
+    CamCoreAccessMiddleware,
+    access_mode,
+)
+from openjarvis.server.camcore_operations_routes import router as camcore_operations_router
+from openjarvis.server.camcore_portal_routes import router as camcore_portal_router
 from openjarvis.server.comparison import comparison_router
 from openjarvis.server.connectors_router import create_connectors_router
 from openjarvis.server.dashboard import dashboard_router
@@ -182,9 +189,14 @@ def create_app(
     config:
         Optional JarvisConfig for other settings.
     """
+    camcore_mode = access_mode() == ACCESS_MODE_TRUSTED_PROXY
     app = FastAPI(
-        title="OpenJarvis API",
-        description="OpenAI-compatible API server for OpenJarvis",
+        title="Jarvis | CamCore AI API" if camcore_mode else "OpenJarvis API",
+        description=(
+            "Private CamCore AI operations API"
+            if camcore_mode
+            else "OpenAI-compatible API server for OpenJarvis"
+        ),
         version="0.1.0",
     )
 
@@ -227,6 +239,7 @@ def create_app(
     )
     app.state.channel_bridge = channel_bridge
     app.state.config = config
+    app.state.camcore_access_mode = access_mode()
     app.state._memory_backend_lock = threading.Lock()
     app.state.memory_backend = memory_backend
     app.state._owns_memory_backend = bool(own_memory_backend)
@@ -433,6 +446,8 @@ def create_app(
     app.include_router(upload_router)
     app.include_router(research_router)
     app.include_router(analytics_router)
+    app.include_router(camcore_portal_router)
+    app.include_router(camcore_operations_router)
     include_all_routes(app)
 
     # Restore SendBlue channel bindings from database on startup
@@ -456,6 +471,10 @@ def create_app(
             app.add_middleware(AuthMiddleware, api_key=api_key)
         except Exception as exc:
             logger.debug("Auth middleware init skipped: %s", exc)
+
+    # CamCore production adds a human identity/role boundary in addition to the
+    # proxy-to-Jarvis API key. In legacy mode this middleware is a no-op.
+    app.add_middleware(CamCoreAccessMiddleware)
 
     # Mount webhook routes (always — SendBlue may be configured dynamically)
     if webhook_config:
