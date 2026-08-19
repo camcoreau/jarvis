@@ -53,12 +53,12 @@ export interface CamCorePortainerEnvironment {
 }
 
 export interface CamCoreOperationsSource {
-  state: 'live' | 'unavailable' | 'error';
+  state: 'live' | 'available' | 'unavailable' | 'error';
   evidence: CamCoreEvidence;
   source: string;
   observed_at?: string;
   detail?: string;
-  data?: {
+  data?: Record<string, unknown> & {
     source?: string;
     environment_count?: number;
     environments?: CamCorePortainerEnvironment[];
@@ -67,7 +67,7 @@ export interface CamCoreOperationsSource {
 
 export interface CamCoreOperationsOverview {
   generated_at: string;
-  sources: {
+  sources: Record<string, CamCoreOperationsSource> & {
     portainer: CamCoreOperationsSource;
   };
   capabilities: CamCoreCapability[];
@@ -109,8 +109,9 @@ export function fetchCamCoreOperationsOverview(): Promise<CamCoreOperationsOverv
   return readJson<CamCoreOperationsOverview>('/v1/camcore/operations/overview');
 }
 
-export function fetchCamCoreProviderStatus(role: 'member' | 'admin' = 'admin'):
-  Promise<CamCoreProviderStatus> {
+export function fetchCamCoreProviderStatus(
+  role: 'member' | 'admin' = 'admin',
+): Promise<CamCoreProviderStatus> {
   return readJson<CamCoreProviderStatus>(
     `/v1/camcore/portal/providers?role=${encodeURIComponent(role)}`,
   );
