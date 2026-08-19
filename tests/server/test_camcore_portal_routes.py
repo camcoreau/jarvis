@@ -263,7 +263,7 @@ def test_provider_status_never_exposes_openai_key(monkeypatch):
     response = client.get("/v1/camcore/portal/providers?role=member")
 
     assert response.status_code == 200
-    assert response.json()["autoResolved"] == "openai"
+    assert response.json()["autoResolved"] == "local"
     assert "do-not-return-this" not in response.text
 
 

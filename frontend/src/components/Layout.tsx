@@ -5,10 +5,15 @@ import { Sidebar } from './Sidebar/Sidebar';
 import { SystemPulse } from './SystemPulse';
 import { useAppStore } from '../lib/store';
 import { checkHealth } from '../lib/api';
+import { fetchCamCoreIdentity, type CamCoreIdentity } from '../lib/camcore-api';
+import { inferenceProviderLabel } from '../lib/model-capabilities';
 
 export function Layout() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
+  const selectedModel = useAppStore((s) => s.selectedModel);
+  const serverInfo = useAppStore((s) => s.serverInfo);
   const [apiReachable, setApiReachable] = useState<boolean | null>(null);
+  const [identity, setIdentity] = useState<CamCoreIdentity | null>(null);
 
   useEffect(() => {
     const check = () => checkHealth().then(setApiReachable);
@@ -22,8 +27,14 @@ export function Layout() {
     };
   }, []);
 
+  useEffect(() => {
+    fetchCamCoreIdentity().then(setIdentity).catch(() => setIdentity(null));
+  }, []);
+
   const navigate = useNavigate();
   const backendLabel = apiReachable === false ? 'Backend unavailable' : apiReachable === null ? 'Checking backend' : 'Systems connected';
+  const sessionLabel = identity?.display_name || identity?.email || (identity?.role === 'admin' ? 'Administrator' : 'CamCore session');
+  const providerLabel = inferenceProviderLabel(selectedModel || serverInfo?.model || '');
 
   return (
     <div className="camcore-shell flex h-full w-full overflow-hidden relative">
@@ -45,9 +56,12 @@ export function Layout() {
           <span className="camcore-status-divider" aria-hidden="true" />
           <span className="camcore-status-context">CamCore AI</span>
           <span className="camcore-status-divider" aria-hidden="true" />
-          <span className="camcore-status-context">Cameron Family Secure Network</span>
+          <span className="camcore-status-context">{sessionLabel}</span>
+          {identity?.role === 'admin' && (
+            <span className="camcore-status-context" style={{ color: 'var(--color-accent)' }}>ADMIN</span>
+          )}
           <span className="camcore-status-spacer" />
-          <span className="camcore-status-context">Local-first</span>
+          <span className="camcore-status-context">{providerLabel}</span>
           <span className="camcore-status-pill">
             <span className="camcore-status-dot" aria-hidden="true" />
             {backendLabel}

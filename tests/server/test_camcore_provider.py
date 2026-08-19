@@ -22,16 +22,28 @@ def _env(**overrides: str) -> dict[str, str]:
         "CAMCORE_OPENAI_FALLBACK_LOCAL": "true",
         "CAMCORE_MEMBER_OPENAI_ENABLED": "true",
         "CAMCORE_ADMIN_OPENAI_ENABLED": "true",
-        "CAMCORE_MEMBER_AUTO_PROVIDER": "openai",
+        "CAMCORE_MEMBER_AUTO_PROVIDER": "local",
         "CAMCORE_ADMIN_AUTO_PROVIDER": "local",
     }
     values.update(overrides)
     return values
 
 
-def test_member_auto_prefers_openai_when_configured():
+def test_member_auto_is_local_first_by_default():
     decision = resolve_provider(
         "auto",
+        role="member",
+        engine=_Engine(["qwen3.5:4b", "gpt-5.4"]),
+        local_model="qwen3.5:4b",
+        environment=_env(),
+    )
+    assert decision.selected == "local"
+    assert decision.model == "qwen3.5:4b"
+
+
+def test_member_can_explicitly_choose_openai_when_configured():
+    decision = resolve_provider(
+        "openai",
         role="member",
         engine=_Engine(["qwen3.5:4b", "gpt-5.4"]),
         local_model="qwen3.5:4b",

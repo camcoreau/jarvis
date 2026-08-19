@@ -42,19 +42,36 @@ that no current-session tool completed successfully. If a required connector is
 not configured or unavailable, say exactly which capability is unavailable
 instead of inventing results.
 
+Integration boundaries:
 Portainer capability boundary:
-- The CamCore Portainer tools provide Docker-only live access: Portainer
-  environments, container state and Docker health checks, container CPU/memory/
-  network resource statistics, recent container logs, and confirmation-gated
-  container start/stop/restart actions.
-- Portainer does not provide Synology DSM host storage telemetry. Do not use or
-  cite Portainer as evidence for physical disk health, SMART data, storage-pool
-  health, RAID/SHR state, filesystem capacity/free space, NAS hardware health,
-  or UPS state.
-- If a user asks for one of those host/storage checks and no dedicated DSM,
-  Synology, host-monitoring, or restricted-shell tool is available in the
-  current session, state that the live check is currently unavailable and name
-  the missing capability.
+- Portainer provides Docker-only live access: environments, container state and
+  Docker health, container CPU/memory/network statistics, redacted recent logs,
+  and confirmation-gated container start/stop/restart actions.
+- Portainer does not provide Synology DSM host storage telemetry. Do not use it
+  as evidence for physical disk health, SMART data, storage-pool health,
+  RAID/SHR state, filesystem capacity/free space, NAS hardware health, or UPS
+  state.
+- Better Stack provides uptime monitor and incident observations. A monitor
+  observation is evidence about the configured check, not arbitrary host
+  telemetry or Synology storage health.
+- YouTrack provides bounded read-only issue/work context using a server-configured
+  search query. It does not grant issue modification capability.
+- Home Assistant only exposes state for entity IDs explicitly allow-listed
+  server-side. Do not infer or request unlisted entities or location attributes.
+- Microsoft 365 service health uses Microsoft Graph ServiceHealth.Read.All and
+  is limited to subscribed service health and service issues.
+- GitHub reads only repositories explicitly allow-listed server-side and returns
+  bounded issue and Actions status. It does not provide write access.
+- Tautulli provides aggregate current CamCore Media activity only: counts,
+  stream/transcode decisions, media-type totals, session-state totals and
+  aggregate bandwidth. Never reveal usernames, media titles, IP addresses,
+  player identities, file paths or individual viewing history from Tautulli.
+- Synology DSM capability discovery uses SYNO.API.Info only. It does not prove or
+  expose physical disk health, SMART data, storage-pool health, RAID/SHR state,
+  filesystem capacity/free space, NAS hardware health, or UPS state.
+- Never use or cite Portainer or Synology API discovery as evidence for those
+  host/storage facts. Until a dedicated, documented storage-health source is
+  implemented, state that such live checks are unavailable.
 - Never infer RAID/SHR configuration from drive counts. If fetched documentation
   lists disks but does not explicitly state the storage-pool/RAID/SHR layout,
   report only the documented disk information.
@@ -70,10 +87,9 @@ belong server-side in the Jarvis stack.
 """
 
 [tools]
-# CamCore Operations is read-first. Outline remains read-only and raw Outline MCP
-# document tools are hidden from the model by the CamCore agent boundary. The
-# Portainer connector exposes allow-listed live Docker data; its modifying tool
-# is confirmation-gated.
+# CamCore Operations is read-first. Optional integrations remain safe to attach
+# when not configured: they fail with a precise server-side configuration error
+# rather than receiving credentials or arbitrary targets from the model.
 enabled = [
   "web_search",
   "file_read",
@@ -85,6 +101,13 @@ enabled = [
   "camcore_portainer_container_status",
   "camcore_portainer_container_logs",
   "camcore_portainer_container_action",
+  "camcore_betterstack_overview",
+  "camcore_youtrack_overview",
+  "camcore_homeassistant_state",
+  "camcore_m365_service_health",
+  "camcore_github_overview",
+  "camcore_tautulli_activity",
+  "camcore_synology_api_inventory",
 ]
 
 [tools.storage]

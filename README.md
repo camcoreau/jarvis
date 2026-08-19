@@ -1,178 +1,170 @@
-<div align="center">
-  <img alt="OpenJarvis" src="assets/OpenJarvis_Horizontal_Logo.png" width="400">
+# Jarvis | CamCore AI
 
-  <p><i>Personal AI, On Personal Devices.</i></p>
+**Private AI operations for CamCore — Cameron Family Secure Network.**
 
-  <p>
-    <a href="https://arxiv.org/abs/2605.17172"><img src="https://img.shields.io/badge/arXiv-2605.17172-b31b1b.svg" alt="arXiv"></a>
-    <a href="https://openjarvis.stanford.edu/"><img src="https://img.shields.io/badge/project-OpenJarvis-blue" alt="Project"></a>
-    <a href="https://open-jarvis.github.io/OpenJarvis/"><img src="https://img.shields.io/badge/docs-mkdocs-blue" alt="Docs"></a>
-    <img src="https://img.shields.io/badge/python-%3E%3D3.10-blue" alt="Python">
-    <img src="https://img.shields.io/badge/license-Apache%202.0-green" alt="License">
-    <a href="https://discord.gg/CMVBmDQ5Fj"><img src="https://img.shields.io/badge/discord-join-7289da?logo=discord&logoColor=white" alt="Discord"></a>
-    <a href="https://x.com/OpenJarvisAI"><img src="https://img.shields.io/badge/X-@OpenJarvisAI-black?logo=x&logoColor=white" alt="X / Twitter"></a>
-  </p>
-</div>
+Jarvis is CamCore's local-first AI assistant and operations interface. It is built on [OpenJarvis](https://github.com/open-jarvis/OpenJarvis) and keeps the upstream architecture intact wherever practical so security fixes and upstream improvements can continue to be merged without turning the fork into a rewrite.
 
----
+> **Status:** private CamCore deployment. This repository is public source code; production credentials, private operational data and runtime secrets must never be committed here.
 
-<div align="center">
-  <img alt="OpenJarvis demo reel" src="assets/openjarvis_demo_reel.webp" width="75%">
-</div>
+## What Jarvis does
 
----
+Jarvis combines four deliberately separate kinds of information:
 
-> **[Documentation](https://open-jarvis.github.io/OpenJarvis/)**
->
-> **[Project Site](https://openjarvis.stanford.edu/)**
->
-> **[Paper](https://arxiv.org/abs/2605.17172)**
->
-> **[Leaderboard](https://open-jarvis.github.io/OpenJarvis/leaderboard/)**
->
-> **[Roadmap](https://open-jarvis.github.io/OpenJarvis/development/roadmap/)**
+- **Documented state** — approved CamCore documentation fetched read-only from Outline.
+- **Available capability** — a connector or tool attached to the current Operations session.
+- **Live observation** — a successful current check against an approved operational source.
+- **Approved action** — a modifying operation that has passed the relevant confirmation and audit controls.
 
-## Why OpenJarvis?
+Those categories are intentionally not interchangeable. Documentation is not proof that a service is healthy, and the presence of a tool is not proof that a backend is reachable.
 
-Personal AI agents are exploding in popularity, but nearly all of them still route intelligence through cloud APIs. Your "personal" AI continues to depend on someone else's server. At the same time, our [Intelligence Per Watt](https://www.intelligence-per-watt.ai/) research showed that local language models already handle 88.7% of single-turn chat and reasoning queries, with intelligence efficiency improving 5.3× from 2023 to 2025. The models and hardware are increasingly ready. What has been missing is the software stack to make local-first personal AI practical.
+## CamCore operating model
 
-OpenJarvis is that stack. It is a framework for local-first personal AI, built around three core ideas: shared primitives for building on-device agents; evaluations that treat energy, FLOPs, latency, and dollar cost as first-class constraints alongside accuracy; and a learning loop that improves models using local trace data. The goal is simple: make it possible to build personal AI agents that run locally by default, calling the cloud only when truly necessary. OpenJarvis aims to be both a research platform and a production foundation for local AI, in the spirit of PyTorch.
+Jarvis is designed around these defaults:
 
-## Installation
+- local inference first;
+- least privilege;
+- read before write;
+- verify before change;
+- explicit evidence labels;
+- no credentials in model context, URLs, Git or browser bundles;
+- separate member and administrator access planes;
+- approval-gated modifying actions;
+- auditable operational changes;
+- public `camcore.au` and private `camcore.network` treated as distinct trust zones.
 
-Pick your platform and run one command. Each installer handles [uv](https://docs.astral.sh/uv/), the Python venv, Ollama, and a starter model — about 3 minutes on broadband.
+The production profile lives under [`deploy/camcore/`](deploy/camcore/).
 
-| Platform | One-liner |
-|---|---|
-| **macOS · Linux · WSL2** | `curl -fsSL https://open-jarvis.github.io/OpenJarvis/install.sh \| bash` |
-| **Native Windows** | `irm https://open-jarvis.github.io/OpenJarvis/install.ps1 \| iex` |
-| **Desktop GUI** | Download `.exe` / `.dmg` / `.deb` / `.rpm` / `.AppImage` from the [latest release](https://github.com/open-jarvis/OpenJarvis/releases) |
+## Access planes
 
-Then `jarvis` to start. The Rust extension and larger models continue downloading in the background; `jarvis doctor` shows status.
+### Member
 
-Platform-specific notes (WSL2 setup, native-Windows scheduled-task service, desktop prerequisites, manual / contributor install): see the [installation docs](https://open-jarvis.github.io/OpenJarvis/getting-started/install/).
+The member surface is chat-only and does not inherit the Operations agent's tools or operational memory. It may receive approved read-only CamCore knowledge excerpts, but it cannot claim to have checked live infrastructure or performed a change.
 
-## Quick Start
+The bundled Jarvis SPA is an administrator workspace. Member-facing clients use the dedicated `/v1/camcore/portal/*` API rather than the generic administrator `/v1` surface.
 
-```bash
-jarvis                          # start chatting (default: chat-simple)
-jarvis init --preset <name>     # switch to a starter config
-```
+### Administrator / Operations
 
-> Prefix `jarvis ...` with `uv run`, or `source .venv/bin/activate` first.
+CamCore production can run in `trusted-proxy` mode. The reverse proxy still authenticates to Jarvis using `OPENJARVIS_API_KEY`, while a second proxy-only shared secret protects a trusted identity envelope containing the signed-in subject and CamCore role.
 
-| Preset | What it does |
-|---|---|
-| `morning-digest-mac` / `morning-digest-linux` / `morning-digest-minimal` | Spoken daily briefing from email, calendar, health, news |
-| `deep-research` | Multi-hop research across indexed docs with citations |
-| `code-assistant` | Agent with code execution, file I/O, and shell access |
-| `scheduled-monitor` | Stateful agent on a schedule with memory |
-| `chat-simple` | Lightweight conversation, no tools |
+A `member` identity is restricted server-side to the member-safe portal routes. An `admin` identity can reach the explicitly protected Operations and upstream administrator APIs.
 
-Example:
+Browser-controlled role headers are not trusted. The authentication proxy must derive the role from its upstream SSO/access policy and add the identity headers only on the trusted proxy-to-Jarvis hop.
 
-```bash
-jarvis init --preset morning-digest-mac
-jarvis connect gdrive          # one OAuth covers Gmail / Calendar / Tasks
-jarvis digest --fresh          # generate and play your first briefing
-```
+## Operations Centre
 
-Per-preset deep dives: [morning digest](https://open-jarvis.github.io/OpenJarvis/user-guide/morning-digest/) · [deep research](https://open-jarvis.github.io/OpenJarvis/user-guide/deep-research/) · [code assistant](https://open-jarvis.github.io/OpenJarvis/user-guide/code-assistant/) · [scheduled monitor](https://open-jarvis.github.io/OpenJarvis/user-guide/scheduled-monitor/) · [chat simple](https://open-jarvis.github.io/OpenJarvis/user-guide/chat-simple/) · or the full [quickstart guide](https://open-jarvis.github.io/OpenJarvis/getting-started/quickstart/).
+The CamCore UI separates **Operations** from **Runtime**:
 
-### Skills
+- **Operations** shows approved infrastructure capabilities and current evidence from configured read-only sources, plus the existing confirmation-gated Docker control boundary.
+- **Runtime** shows Jarvis inference telemetry, energy information, trace debugging and estimated local-vs-cloud cost comparison.
 
-Skills teach agents how to better use tools and improve their reasoning. Every skill is a tool — agents discover them from a catalog and invoke them on demand.
+The capability inventory explicitly reports missing capabilities instead of pretending they are healthy. In particular, Portainer and Synology API discovery must never be used as evidence for Synology storage pools, SMART, RAID/SHR, filesystem capacity, NAS hardware or UPS state.
 
-```bash
-# Install skills from public sources
-jarvis skill install hermes:arxiv
-jarvis skill sync hermes --category research
+## Current CamCore integrations
 
-# Use skills with any agent
-jarvis ask "Use the code-explainer skill to explain this Python code: for i in range(5): print(i*2)"
+### Outline — read-only knowledge
 
-# Optimize skills from your trace history
-jarvis optimize skills --policy dspy
+Jarvis discovers only the approved read tools used to search and fetch CamCore documentation. The Outline credential is supplied at runtime and is never committed.
 
-# Benchmark the impact
-jarvis bench skills --max-samples 5 --seeds 42
-```
+### Portainer — Docker Operations
 
-Import from [Hermes Agent](https://github.com/NousResearch/hermes-agent) (~150 skills), [OpenClaw](https://github.com/openclaw/skills) (~13,700 community skills), or any GitHub repo. Skills follow the [agentskills.io](https://agentskills.io/specification) open standard.
+Jarvis can list Portainer environments, inspect allow-listed Docker state and health, read bounded/redacted logs and perform start/stop/restart only through confirmation-gated tooling. Portainer is not a NAS or host-storage monitor.
 
-See the [Skills User Guide](https://open-jarvis.github.io/OpenJarvis/user-guide/skills/) and [Skills Tutorial](https://open-jarvis.github.io/OpenJarvis/tutorials/skills-workflow/) for details.
+### Better Stack — uptime and incidents
 
-### Built-in Agents
+Jarvis can read configured uptime monitor names/statuses and unresolved incident summaries. It deliberately omits request headers, response bodies and monitored URLs from the model-facing payload.
 
-OpenJarvis ships with eight built-in agents across three execution modes (on-demand, scheduled, continuous):
+### YouTrack — read-only Operations work
 
-| Agent | Type | What it does |
-|-------|------|-------------|
-| `morning_digest` | Scheduled | Daily briefing from email, calendar, health, news — with TTS audio |
-| `deep_research` | On-demand | Multi-hop research with citations across web and local docs |
-| `monitor_operative` | Continuous | Long-horizon monitoring with memory, compression, and retrieval |
-| `orchestrator` | On-demand | Multi-turn reasoning with automatic tool selection |
-| `native_react` | On-demand | ReAct (Thought-Action-Observation) loop agent |
-| `operative` | Continuous | Persistent autonomous agent with state management |
-| `native_openhands` | On-demand | CodeAct — generates and executes Python code |
-| `simple` | On-demand | Single-turn chat, no tools |
+Jarvis can read a bounded set of issues selected by a server-configured query. It returns issue IDs, summaries, project, resolution state and a small allow-list of operational custom fields. The tool has no issue-write method.
 
-See the [User Guide](https://open-jarvis.github.io/OpenJarvis/user-guide/morning-digest/) and [Tutorials](https://open-jarvis.github.io/OpenJarvis/tutorials/) for detailed setup instructions.
+### Home Assistant — entity-scoped state
 
-Full documentation — including Docker deployment, cloud engines, development setup, and tutorials — at **[open-jarvis.github.io/OpenJarvis](https://open-jarvis.github.io/OpenJarvis/)**.
+Jarvis can read current state only for entity IDs explicitly listed in `CAMCORE_HOMEASSISTANT_ENTITIES`. It does not enumerate all household state and drops location/arbitrary attributes from returned state objects.
 
-## Community
+### Microsoft 365 — service health
 
-- **GitHub:** [github.com/open-jarvis/OpenJarvis](https://github.com/open-jarvis/OpenJarvis)
-- **Discord:** [discord.gg/CMVBmDQ5Fj](https://discord.gg/CMVBmDQ5Fj)
-- **X / Twitter:** [@OpenJarvisAI](https://x.com/OpenJarvisAI)
-- **Docs:** [open-jarvis.github.io/OpenJarvis](https://open-jarvis.github.io/OpenJarvis/)
+Jarvis can use a dedicated Microsoft Graph application with `ServiceHealth.Read.All` to read subscribed service health and current service issues. This integration does not grant mailbox, user, device or configuration write access.
 
-## Contributing
+### GitHub — allow-listed repository status
 
-We welcome contributions! See the [Contributing Guide](CONTRIBUTING.md) for incentives, contribution types, and the PR process.
+Jarvis can read bounded issue and Actions state only for repositories listed in `CAMCORE_GITHUB_REPOSITORIES`. No repository target can be supplied by the model, and the tool contains no write operation.
 
-Quick start for contributors:
+### CamCore Media — aggregate Tautulli activity
+
+Jarvis can read current Tautulli activity as an aggregate operational summary: total streams, transcode/direct-play/direct-stream counts, LAN/WAN counts, media-type totals, session-state totals and aggregate bandwidth. It never returns usernames, IP addresses, media titles, file paths, player identities or individual viewing history to the model.
+
+### Synology DSM — capability discovery only
+
+Jarvis can call the documented `SYNO.API.Info` endpoint to discover API names and supported versions advertised by the configured DSM. This does **not** expose or claim physical disk, SMART, storage-pool, RAID/SHR, filesystem, hardware or UPS health.
+
+## Remaining read-first integrations
+
+The main remaining capability gaps are:
+
+1. A documented and supportable Synology/host source for volume, storage-pool, SMART, hardware and UPS health.
+2. Deeper host telemetry where Better Stack uptime checks are insufficient.
+3. Optional Microsoft 365 licensing/device/security readers, each with its own least-privilege permission boundary.
+
+Any write expansion requires a separately defined approval boundary, rollback path and audit behaviour.
+
+## Production deployment
+
+Jarvis is deployed as a private Portainer Git stack behind the CamCore reverse proxy. The stack:
+
+- publishes no host port;
+- keeps Ollama off the proxy network;
+- uses immutable GHCR commit-SHA image tags;
+- runs Jarvis with a read-only root filesystem;
+- drops all Linux capabilities;
+- enables secret/PII scanning, SSRF protection, rate limits, confirmation enforcement and audit logging;
+- disables external OpenJarvis analytics in the CamCore production profile.
+
+See [`deploy/camcore/README.md`](deploy/camcore/README.md) for deployment and rollback instructions.
+
+## Development
+
+The internal Python package, CLI command and many compatibility identifiers deliberately remain `openjarvis`. Do not broadly rename them for branding purposes; keeping those internals stable materially reduces upstream merge conflicts.
+
+Typical contributor setup follows upstream OpenJarvis:
 
 ```bash
-git clone https://github.com/open-jarvis/OpenJarvis.git
-cd OpenJarvis
+git clone https://github.com/camcoreau/jarvis.git
+cd jarvis
+git remote add upstream https://github.com/open-jarvis/OpenJarvis.git
 uv sync --extra dev
 uv run pre-commit install
 uv run pytest tests/ -v
 ```
 
-Browse the [Roadmap](https://open-jarvis.github.io/OpenJarvis/development/roadmap/) for areas where help is needed. Comment **"take"** on any issue to get auto-assigned.
+CamCore work should be developed on `agent/*` branches and merged through pull requests after the relevant Python, Rust, frontend and deployment checks pass.
 
-## About
+## Upstream sync
 
-OpenJarvis is part of [Intelligence Per Watt](https://www.intelligence-per-watt.ai/), a research initiative studying the intelligence efficiency of AI systems. The project is developed at [Hazy Research](https://hazyresearch.stanford.edu/) and the [Scaling Intelligence Lab](https://scalingintelligence.stanford.edu/) at [Stanford SAIL](https://ai.stanford.edu/).
+Do not force-reset CamCore `main` to upstream. Sync on a dedicated branch:
 
-## Sponsors
-
-<p>
-  <a href="https://www.laude.org/">Laude Institute</a> &bull;
-  <a href="https://datascience.stanford.edu/marlowe">Stanford Marlowe</a> &bull;
-  <a href="https://cloud.google.com/">Google Cloud Platform</a> &bull;
-  <a href="https://lambda.ai/">Lambda Labs</a> &bull;
-  <a href="https://ollama.com/">Ollama</a> &bull;
-  <a href="https://research.ibm.com/">IBM Research</a> &bull;
-  <a href="https://hai.stanford.edu/">Stanford HAI</a>
-</p>
-
-## Citation
-```bibtex
-@misc{saadfalcon2026openjarvispersonalaipersonal,
-      title={OpenJarvis: Personal AI, On Personal Devices}, 
-      author={Jon Saad-Falcon and Avanika Narayan and Robby Manihani and Tanvir Bhathal and Herumb Shandilya and Hakki Orhun Akengin and Gabriel Bo and Andrew Park and Matthew Hart and Caia Costello and Chuan Li and Christopher Ré and Azalia Mirhoseini},
-      year={2026},
-      eprint={2605.17172},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2605.17172}, 
-}
+```bash
+git checkout main
+git pull origin main
+git checkout -b agent/sync-openjarvis-YYYYMMDD
+git fetch upstream
+git merge --no-ff upstream/main
 ```
 
-## License
+Resolve conflicts, validate the CamCore boundaries and merge the sync through a pull request.
 
-[Apache 2.0](LICENSE)
+More fork-maintenance guidance is in [`CAMCORE.md`](CAMCORE.md).
+
+## Upstream OpenJarvis
+
+Jarvis remains derived from OpenJarvis, a local-first personal AI framework developed as part of the Intelligence Per Watt research initiative. Upstream documentation, research material and community resources remain available from the original project:
+
+- OpenJarvis source: `open-jarvis/OpenJarvis`
+- OpenJarvis documentation: `open-jarvis.github.io/OpenJarvis`
+- OpenJarvis project: `openjarvis.stanford.edu`
+- Paper: arXiv `2605.17172`
+
+Upstream copyright, attribution and Apache 2.0 licensing are retained.
+
+## Licence
+
+[Apache License 2.0](LICENSE)

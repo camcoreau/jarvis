@@ -17,6 +17,11 @@ import uuid
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from openjarvis.server.camcore_access import (
+    request_identity,
+    request_role,
+    require_admin,
+)
 from openjarvis.server.camcore_member_knowledge import build_member_knowledge_context
 from openjarvis.server.camcore_provider import provider_status, resolve_provider
 from openjarvis.server.models import (
@@ -347,13 +352,30 @@ async def _operations_stream(
     )
 
 
+@router.get("/identity")
+async def camcore_portal_identity(request: Request):
+    """Return safe identity metadata asserted by the trusted CamCore proxy."""
+
+    identity = request_identity(request)
+    if identity is None:
+        return {
+            "subject": "",
+            "role": "legacy",
+            "email": "",
+            "display_name": "",
+            "auth_source": "legacy",
+        }
+    return identity.to_safe_dict()
+
+
 @router.get("/providers")
 async def camcore_portal_providers(request: Request):
     """Expose provider availability without exposing provider credentials."""
 
-    role = str(request.query_params.get("role", "member")).strip().lower()
-    if role not in {"member", "admin"}:
+    requested_role = str(request.query_params.get("role", "member")).strip().lower()
+    if requested_role not in {"member", "admin"}:
         raise HTTPException(status_code=400, detail="Role must be member or admin")
+    role = request_role(request, requested_role)
     return provider_status(
         role=role,
         engine=request.app.state.engine,
@@ -446,6 +468,7 @@ async def camcore_operations_chat(
     may still send the minimum required prompt/tool results to OpenAI.
     """
 
+    require_admin(request)
     local_model = _local_model(request, request_body)
     try:
         decision = resolve_provider(

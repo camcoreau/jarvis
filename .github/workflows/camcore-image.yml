@@ -50,6 +50,7 @@ jobs:
           CAMCORE_JARVIS_MODEL: qwen3.5:4b
           CAMCORE_PROXY_NETWORK: ci-proxy
           OPENJARVIS_API_KEY: oj_sk_ci_validation_only
+          CAMCORE_PROXY_IDENTITY_SECRET: proxy_identity_ci_validation_only
           CAMCORE_OUTLINE_API_KEY: outline_ci_validation_only
           CAMCORE_TZ: Australia/Melbourne
         run: docker compose -f deploy/camcore/compose.yaml config > /tmp/camcore-jarvis-compose.yaml
@@ -75,6 +76,7 @@ jobs:
           CAMCORE_JARVIS_RELEASE=ci \
           CAMCORE_JARVIS_MODEL=qwen3.5:4b \
           CAMCORE_PROXY_NETWORK=ci-proxy \
+          CAMCORE_PROXY_IDENTITY_SECRET=proxy_identity_ci_validation_only \
           CAMCORE_OUTLINE_API_KEY=outline_ci_validation_only \
           docker compose -f deploy/camcore/compose.yaml config >/dev/null 2>&1
           missing_jarvis_status=$?
@@ -83,12 +85,25 @@ jobs:
           CAMCORE_JARVIS_MODEL=qwen3.5:4b \
           CAMCORE_PROXY_NETWORK=ci-proxy \
           OPENJARVIS_API_KEY=oj_sk_ci_validation_only \
+          CAMCORE_OUTLINE_API_KEY=outline_ci_validation_only \
+          docker compose -f deploy/camcore/compose.yaml config >/dev/null 2>&1
+          missing_identity_status=$?
+
+          CAMCORE_JARVIS_RELEASE=ci \
+          CAMCORE_JARVIS_MODEL=qwen3.5:4b \
+          CAMCORE_PROXY_NETWORK=ci-proxy \
+          OPENJARVIS_API_KEY=oj_sk_ci_validation_only \
+          CAMCORE_PROXY_IDENTITY_SECRET=proxy_identity_ci_validation_only \
           docker compose -f deploy/camcore/compose.yaml config >/dev/null 2>&1
           missing_outline_status=$?
           set -e
 
           if [ "$missing_jarvis_status" -eq 0 ]; then
             echo 'Compose unexpectedly accepted a missing OPENJARVIS_API_KEY.' >&2
+            exit 1
+          fi
+          if [ "$missing_identity_status" -eq 0 ]; then
+            echo 'Compose unexpectedly accepted a missing CAMCORE_PROXY_IDENTITY_SECRET.' >&2
             exit 1
           fi
           if [ "$missing_outline_status" -eq 0 ]; then

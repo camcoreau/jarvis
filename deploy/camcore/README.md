@@ -1,56 +1,200 @@
 # Jarvis | CamCore AI — production deployment
 
-This directory defines the private CamCore production deployment for Jarvis.
-It is designed for a Portainer Git stack behind the existing Nginx Proxy
-Manager (NPM) instance.
+This directory defines the private CamCore production deployment for Jarvis. It is designed for a Portainer Git stack behind the existing Nginx Proxy Manager (NPM) path, with local Ollama inference and explicit CamCore access boundaries.
 
 ## Architecture
 
 - `camcore-jarvis` serves the Jarvis web UI and API on container port `8000`.
-- `camcore-jarvis-ollama` provides local inference and is not published to the
-  Docker host.
-- `camcore-jarvis-model-init` ensures the selected Ollama model is present before
-  Jarvis starts.
-- `camcore-jarvis-data` persists Jarvis databases, credentials, traces, skills,
-  sessions and other runtime state.
+- `camcore-jarvis-ollama` provides local inference and is not published to the Docker host or proxy network.
+- `camcore-jarvis-model-init` ensures the selected Ollama model is present before Jarvis starts.
+- `camcore-jarvis-data` persists Jarvis databases, traces, skills, sessions and other runtime state.
 - `camcore-jarvis-ollama-models` persists downloaded model data.
 - Jarvis joins the Docker network shared with NPM. Ollama does not.
 - No service in this stack publishes a host port.
-- The CamCore production `config.toml` is baked into the immutable Jarvis image
-  at `/etc/openjarvis/camcore-config.toml`. The Portainer stack does not rely on
-  bind mounts from Portainer's temporary Git checkout.
-- CamCore documentation is available to Jarvis through Outline's Streamable HTTP
-  MCP endpoint over the shared `npm-backend` Docker network. The CamCore profile
-  exposes only the read-only `list_documents` and `fetch` tools.
+- The production `config.toml` is baked into the immutable Jarvis image at `/etc/openjarvis/camcore-config.toml`.
+- Outline is available through its internal MCP endpoint with read-only tool discovery.
 
-The deployment intentionally remains private. Do not create a public proxy host
-or public DNS record for Jarvis during the foundation phase.
+Jarvis remains a private CamCore service. Do not create public DNS or a public unauthenticated proxy path for the administrator UI.
 
-## 1. Confirm the NPM Docker network
+## Access model
 
-On the Portainer host, identify the external Docker network already shared with
-Nginx Proxy Manager:
+CamCore production uses two independent checks:
 
-```bash
-docker network ls
+1. **Proxy-to-Jarvis API authentication** — `OPENJARVIS_API_KEY` is injected server-side by the reverse proxy and protects `/v1`, `/api` and metrics routes.
+2. **CamCore identity/role boundary** — `CAMCORE_ACCESS_MODE=trusted-proxy` requires a second proxy-only shared secret plus an asserted subject and role.
+
+The trusted identity headers are:
+
+```text
+X-CamCore-Proxy-Secret: <CAMCORE_PROXY_IDENTITY_SECRET>
+X-CamCore-Subject: <stable authenticated subject>
+X-CamCore-Role: member | admin
+X-CamCore-Email: <optional email>
+X-CamCore-Display-Name: <optional display name>
 ```
 
-Use that exact network name for `CAMCORE_PROXY_NETWORK`. The compose file will
-fail closed if the value is missing instead of silently creating an isolated
-network that NPM cannot reach.
+Jarvis trusts those headers **only** when `X-CamCore-Proxy-Secret` matches the runtime secret. Requests must never be allowed to supply or override these headers directly from the public/client side.
 
-## 2. Generate the Jarvis API key
+### Member boundary
 
-Generate a strong key on the host:
+A trusted `member` identity is restricted server-side to the member-safe CamCore portal routes. It cannot reach generic OpenJarvis `/v1` APIs, Operations APIs, agent management, approvals, model management or other administrator surfaces.
 
-```bash
-python3 -c 'import secrets; print("oj_sk_" + secrets.token_urlsafe(32))'
+The bundled Jarvis SPA is an administrator workspace and uses the generic Operations agent API. A member-facing site should use the dedicated `/v1/camcore/portal/*` member API rather than embedding the administrator SPA.
+
+### Administrator boundary
+
+A trusted `admin` identity can reach the private administrator UI and explicitly protected Operations APIs. Modifying tools still enforce their own confirmation and capability requirements after authentication.
+
+### SSO integration
+
+The preferred end state is for an authentication/access layer in front of NPM to derive the subject, display name, email and role from the signed-in CamCore/Microsoft identity, then pass only verified identity data to the trusted proxy hop.
+
+Do not let browser JavaScript choose `X-CamCore-Role`. Do not use a query parameter such as `?role=admin` as authorization.
+
+Until claim-based SSO mapping is in place, a private administrator-only host may use a static `admin` identity **only if access to that host is already restricted to administrators by the surrounding private network/access policy**. This is an interim compatibility option, not per-user authentication.
+
+## 1. Required Portainer environment
+
+Set:
+
+```dotenv
+CAMCORE_JARVIS_RELEASE=<published main commit SHA>
+CAMCORE_JARVIS_MODEL=qwen3.5:4b
+CAMCORE_PROXY_NETWORK=<existing NPM Docker network>
+OPENJARVIS_API_KEY=<generated secret>
+CAMCORE_ACCESS_MODE=trusted-proxy
+CAMCORE_PROXY_IDENTITY_SECRET=<second independently generated secret>
+CAMCORE_OUTLINE_API_KEY=<read-only Outline API key>
+CAMCORE_TZ=Australia/Melbourne
 ```
 
-Store the result in Portainer as `OPENJARVIS_API_KEY`. Do not commit it to Git.
-The same key is also used in the NPM proxy configuration described below.
+Generate the two Jarvis/proxy secrets independently. Do not reuse the Portainer, Outline or provider credentials.
 
-## 3. Create the Portainer Git stack
+## 2. Optional read-only Operations integrations
+
+A blank optional credential does not prevent Jarvis from starting. The corresponding tool remains visible as an available capability but returns a precise server-side configuration error until configured. This preserves capability truthfulness without making optional services hard dependencies.
+
+### Portainer — Docker only
+
+```dotenv
+CAMCORE_PORTAINER_URL=<internal Portainer API origin>
+CAMCORE_PORTAINER_API_KEY=<Portainer access token>
+CAMCORE_PORTAINER_VERIFY_TLS=true
+```
+
+Portainer provides environments, allow-listed container state/health, resource statistics, bounded/redacted logs, and confirmation-gated start/stop/restart. It is not evidence for Synology storage or host health.
+
+### Better Stack — uptime and active incidents
+
+```dotenv
+CAMCORE_BETTERSTACK_API_TOKEN=<Uptime API token>
+CAMCORE_BETTERSTACK_TEAM=<optional team name>
+```
+
+The tool returns monitor names/statuses, last check time, status counts and bounded unresolved incident metadata. It deliberately omits monitored URLs, request headers, response bodies and other raw monitor configuration.
+
+Use a token that can read the required Uptime resources and nothing more than necessary.
+
+### YouTrack — read-only operational work
+
+```dotenv
+CAMCORE_YOUTRACK_URL=https://tasks.camcore.network
+CAMCORE_YOUTRACK_TOKEN=<read-only/service token>
+CAMCORE_YOUTRACK_QUERY=#Unresolved
+```
+
+Jarvis requests at most 50 issues matching the server-configured query and returns only the issue ID, summary, project, resolution/update state and the allow-listed operational fields `State`, `Priority`, `Assignee`, `Service`, `Impact` and `Category` when present.
+
+The model cannot supply a YouTrack URL, token or arbitrary search query.
+
+### Home Assistant — explicit entity allow-list
+
+```dotenv
+CAMCORE_HOMEASSISTANT_URL=https://home.camcore.network
+CAMCORE_HOMEASSISTANT_TOKEN=<long-lived access token>
+CAMCORE_HOMEASSISTANT_ENTITIES=sensor.example,binary_sensor.example
+```
+
+Jarvis can request only entity IDs in `CAMCORE_HOMEASSISTANT_ENTITIES`. Returned attributes are limited to `friendly_name`, `unit_of_measurement` and `device_class`; arbitrary attributes and location data are not returned.
+
+Do not add person/device trackers or location-sensitive entities unless there is a specific operational requirement.
+
+### Microsoft 365 — service health only
+
+```dotenv
+CAMCORE_M365_TENANT_ID=<tenant id>
+CAMCORE_M365_CLIENT_ID=<app registration client id>
+CAMCORE_M365_CLIENT_SECRET=<client secret>
+```
+
+Create a dedicated Entra application with only the Microsoft Graph application permission required for service communications: `ServiceHealth.Read.All`, with administrator consent. Jarvis uses the client-credentials flow and requests `https://graph.microsoft.com/.default` server-side.
+
+The tool reads subscribed service health and current service issues. It does not read mail, files, users, devices or configuration and has no write method.
+
+### GitHub — repository allow-list
+
+```dotenv
+CAMCORE_GITHUB_REPOSITORIES=camcoreau/jarvis,camcoreau/camcore-websites
+CAMCORE_GITHUB_TOKEN=<read-only fine-grained token>
+```
+
+The tool reads bounded open-issue and GitHub Actions state only for repositories listed in `CAMCORE_GITHUB_REPOSITORIES`. Use a fine-grained read-only token so Operations does not depend on low anonymous API rate limits and can cover private repositories where required.
+
+No repository target can be supplied by the model.
+
+### CamCore Media — aggregate Tautulli activity
+
+```dotenv
+CAMCORE_TAUTULLI_URL=<internal Tautulli origin>
+CAMCORE_TAUTULLI_API_KEY=<Tautulli API key>
+```
+
+Jarvis calls Tautulli's `get_activity` command but converts the session-rich response into aggregate operational evidence before it reaches the model. Returned data is limited to:
+
+- current stream count;
+- transcode/direct-play/direct-stream counts;
+- LAN/WAN stream counts;
+- aggregate bandwidth;
+- media-type counts;
+- transcode-decision counts;
+- playing/paused session-state counts.
+
+Jarvis does **not** return Tautulli usernames, IP addresses, player identities, media titles, file paths or individual viewing history.
+
+### Synology DSM — API discovery only
+
+```dotenv
+CAMCORE_SYNOLOGY_URL=<fixed DSM origin>
+```
+
+Jarvis calls only the documented `SYNO.API.Info` discovery endpoint and returns advertised `SYNO.API.*`, `SYNO.Core.*` and `SYNO.Storage.*` API names/versions. This is capability discovery, not an authenticated storage-health integration.
+
+It must not be used as evidence for:
+
+- physical disk or SMART state;
+- storage-pool health;
+- RAID/SHR layout or health;
+- filesystem free space;
+- NAS hardware health;
+- UPS state.
+
+Those remain unavailable until a documented, supportable read-only source is implemented.
+
+## 3. Optional OpenAI hybrid inference
+
+```dotenv
+OPENAI_API_KEY=
+CAMCORE_OPENAI_MODEL=gpt-5.6
+CAMCORE_OPENAI_FALLBACK_LOCAL=true
+CAMCORE_MEMBER_OPENAI_ENABLED=true
+CAMCORE_ADMIN_OPENAI_ENABLED=true
+CAMCORE_MEMBER_AUTO_PROVIDER=local
+CAMCORE_ADMIN_AUTO_PROVIDER=local
+```
+
+`Auto` is local-first. OpenAI remains an explicit option when configured. See `OPENAI.md` for the provider boundary and rollback procedure.
+
+## 4. Portainer Git stack
 
 Use:
 
@@ -59,41 +203,13 @@ Use:
 - Compose path: `deploy/camcore/compose.yaml`
 - Stack name: `camcore-jarvis`
 
-Set these environment variables in Portainer:
+`CAMCORE_JARVIS_RELEASE` must be an immutable image tag published by the CamCore image workflow. Do not use `latest`.
 
-```dotenv
-CAMCORE_JARVIS_RELEASE=<published main commit SHA>
-CAMCORE_JARVIS_MODEL=qwen3.5:4b
-CAMCORE_PROXY_NETWORK=<existing NPM Docker network>
-OPENJARVIS_API_KEY=<generated secret>
-CAMCORE_OUTLINE_API_KEY=<read-only Outline API key>
-CAMCORE_TZ=Australia/Melbourne
-```
+The compose file intentionally relies on named volumes and the immutable image rather than bind-mounting Portainer's temporary Git checkout.
 
-`CAMCORE_JARVIS_RELEASE` must be an immutable image tag published by the
-CamCore image workflow. Do not use `latest`.
+## 5. Reverse proxy configuration
 
-`CAMCORE_OUTLINE_API_KEY` is resolved only at runtime through the MCP server's
-`token_env` setting. The real credential must exist only in Portainer (or another
-runtime secret store) and must never be written into `config.toml`, this
-repository, a URL, or client-side code.
-
-The Outline credential should be limited to the `documents.list` and
-`documents.info` scopes. Those scopes are sufficient for the configured MCP
-`list_documents` search tool and `fetch` document reader. The Jarvis config also
-applies an `include_tools` allowlist for those two tools so Outline write-capable
-tools are not exposed to the CamCore agent.
-
-The compose file intentionally contains no repository-file `configs:` mount.
-This avoids Portainer Git-stack deployments failing when their temporary checkout
-path is not available to the Docker daemon at container-create time.
-
-On the first deployment, model download can take some time. Jarvis intentionally
-waits for the model-init service to complete before starting.
-
-## 4. Configure Nginx Proxy Manager
-
-Create a private Proxy Host with:
+Create the private proxy host:
 
 - Domain: `jarvis.camcore.network`
 - Scheme: `http`
@@ -101,189 +217,121 @@ Create a private Proxy Host with:
 - Forward port: `8000`
 - Websockets: enabled
 - Block common exploits: enabled
-- Main Proxy Host **Advanced** configuration: leave empty for Jarvis-specific
-  authorization headers.
 
-The browser UI loads without API authentication, but `/v1` and `/api` are
-protected by `OPENJARVIS_API_KEY`. NPM must inject the key server-side so it is
-not stored in every browser.
+The browser UI loads as static content, but API requests need the server-side headers.
 
-Create a **Custom Location** for `/` with the same upstream:
+For the administrator-only private host, the `/` custom location must inject the Jarvis API key and proxy identity secret. If a verified SSO/access layer is supplying user claims, map those verified values into the CamCore identity headers. Otherwise a static interim administrator identity can be used only on an already administrator-restricted private host.
 
-- Location: `/`
-- Scheme: `http`
-- Forward hostname: `camcore-jarvis`
-- Forward port: `8000`
-
-Add this to that custom location's **Advanced** configuration, replacing the
-placeholder with the same secret stored in Portainer:
+Example **interim private-admin** NPM location configuration:
 
 ```nginx
 proxy_set_header Authorization "Bearer <OPENJARVIS_API_KEY>";
+proxy_set_header X-CamCore-Proxy-Secret "<CAMCORE_PROXY_IDENTITY_SECRET>";
+proxy_set_header X-CamCore-Subject "private-admin-host";
+proxy_set_header X-CamCore-Role "admin";
+proxy_set_header X-CamCore-Display-Name "CamCore Administrator";
 
-# Jarvis chat uses Server-Sent Events. Do not buffer or cache the stream, and
-# allow long local-model turns to remain connected.
 proxy_buffering off;
 proxy_cache off;
 proxy_read_timeout 3600s;
 proxy_send_timeout 3600s;
 ```
 
-The authorization directive belongs inside the custom location because NPM's
-generated location block defines its own proxy headers. Putting the Jarvis
-Authorization header only in the Proxy Host's top-level Advanced configuration
-can leave the upstream request without the intended header.
+When SSO claim forwarding is added, replace the static subject/display name/role with values provided by the trusted authentication layer. Ensure client-supplied versions of the CamCore identity headers are stripped before the trusted values are set.
 
-NPM then supplies the credential to Jarvis server-side. The API key must never
-be written into this repository or into a public-facing client bundle.
+The two secret-bearing headers must exist only in Portainer/NPM or another trusted runtime secret store, never in the browser bundle or repository.
 
-## 5. Outline knowledge access
+## 6. Outline knowledge access
 
-Jarvis and Outline are both attached to `npm-backend`, so Jarvis connects to the
-Outline container directly instead of resolving `docs.camcore.network` to NPM's
-LAN/macvlan address:
+Jarvis connects to Outline over the internal Docker bridge:
 
 ```text
 http://outline:3000/mcp
 ```
 
-Outline still needs the request context associated with its canonical internal
-hostname. The MCP transport therefore sends these static, non-secret routing
-headers:
+The CamCore profile sends static routing headers for Outline's canonical internal hostname and resolves the bearer credential only from `CAMCORE_OUTLINE_API_KEY` at runtime.
 
-```text
-Host: docs.camcore.network
-X-Forwarded-Host: docs.camcore.network
-X-Forwarded-Proto: https
-```
+Tool discovery is restricted to:
 
-This route was verified live from `camcore-jarvis` against Outline 1.9.2: the
-MCP `initialize` request returned HTTP 200 with `text/event-stream` and reported
-server name `outline`, version `1.9.2`.
+- `list_documents` — search/list accessible documents;
+- `fetch` — retrieve selected document content.
 
-The bearer credential remains separate in `CAMCORE_OUTLINE_API_KEY`; the static
-header feature rejects `Authorization`, `Content-Type`, `Accept`, and
-`Mcp-Session-Id` overrides so secrets and protocol state cannot be moved into
-repository configuration.
+Documentation is authoritative for **documented state**, not current runtime health.
 
-Outline's MCP route filters available tools by the scopes attached to the
-authenticated token. The CamCore profile additionally filters discovery to:
+## 7. Internal DNS
 
-- `list_documents` — full-text search/listing of accessible documents.
-- `fetch` — retrieve the selected document's full content.
+Create only the internal DNS record for `jarvis.camcore.network` and point it to the private reverse-proxy path. Keep the administrator UI off public DNS.
 
-Jarvis is instructed to consult this source for documented CamCore architecture,
-server roles, services, policies, standards, procedures and configuration. It
-must not treat documentation as proof that a host or service is currently online.
-Live health should come from a monitoring integration when one is added.
+## 8. Verify deployment
 
-If the Outline MCP integration cannot authenticate, Jarvis should continue to
-run without those tools and log the discovery failure. The Docker stack itself
-requires `CAMCORE_OUTLINE_API_KEY`, preventing an accidental deployment that
-omits the configured credential entirely.
-
-## 6. Internal DNS only
-
-Create the internal DNS record for `jarvis.camcore.network` so CamCore clients
-resolve it to the private reverse-proxy path. Do not publish the hostname as a
-public internet service during the initial deployment.
-
-## 7. Verify the deployment
-
-After Portainer reports the stack healthy, test from a CamCore client that can
-reach the private NPM endpoint:
+From an administrator client on the trusted private path:
 
 ```bash
 curl -I https://jarvis.camcore.network/
 curl -s https://jarvis.camcore.network/v1/models
+curl -s https://jarvis.camcore.network/v1/camcore/portal/identity
+curl -s https://jarvis.camcore.network/v1/camcore/operations/capabilities
+curl -s https://jarvis.camcore.network/v1/camcore/operations/overview
 ```
 
-The first request should return the Jarvis UI. The second should return the
-available model list through NPM's server-side authorization header.
+Expected results:
 
-Verify the SSE chat path separately with a streaming client. A healthy request
-returns an OpenAI-compatible sequence and finishes with `data: [DONE]`:
+- the UI loads;
+- `/v1/models` succeeds for the admin identity;
+- `/identity` reports `admin` and trusted proxy identity metadata;
+- capability inventory distinguishes attached capabilities from unavailable ones;
+- each configured Operations source reports `LIVE` only after a successful current provider request;
+- unconfigured optional integrations report a configuration error without taking down the rest of Operations;
+- CamCore Media reports aggregate-only Tautulli activity and no viewer/media identity;
+- Synology reports capability discovery and explicitly does not claim storage health.
 
-```bash
-curl -N \
-  -H 'Content-Type: application/json' \
-  --data-binary @jarvis-test.json \
-  https://jarvis.camcore.network/v1/chat/completions
-```
+A request sent through a trusted **member** path should receive HTTP 403 for `/v1/models` and `/v1/camcore/operations/*`, while `/v1/camcore/portal/chat/completions` remains available.
 
-Example `jarvis-test.json`:
-
-```json
-{"model":"qwen3.5:4b","messages":[{"role":"user","content":"Reply with exactly OK"}],"stream":true}
-```
-
-In the Jarvis startup logs, verify that Outline discovery succeeds and reports
-two tools from `camcore-outline`, for example:
-
-```text
-Discovered 2 MCP tools from server 'camcore-outline'
-```
-
-Then use a knowledge-grounding test such as:
-
-> Who or what are Earth, Jupiter, Ganymede, Saturn, Mars, Venus and Europa in
-> CamCore? Search the CamCore knowledge base before answering. Tell me which
-> documentation you used and do not guess.
-
-In Portainer, confirm:
-
-- `camcore-jarvis` is healthy.
-- `camcore-jarvis-ollama` is healthy.
-- `camcore-jarvis-model-init` exited successfully.
-- `camcore-jarvis-data-init` exited successfully.
-- Neither Jarvis nor Ollama has a published host port.
+Verify startup logs also report the expected Outline tool discovery.
 
 ## Model changes
 
-Change `CAMCORE_JARVIS_MODEL` in Portainer and redeploy. The model-init service
-will ask Ollama to pull the selected model before Jarvis starts with it.
+Change `CAMCORE_JARVIS_MODEL` in Portainer and redeploy. The model-init service pulls the selected model before Jarvis starts.
 
-Start conservatively. Increase model size only after checking memory pressure,
-CPU load and response latency on the host.
+The remote web UI never preloads through client-local Ollama. Model preload is a desktop/Tauri-only optimisation; the server/deployment path owns Ollama in web mode.
 
 ## Rollback
 
-Rollback is intentionally simple:
-
 1. Set `CAMCORE_JARVIS_RELEASE` to the previous known-good published commit SHA.
 2. Redeploy the stack.
-3. Leave the persistent data and Ollama model volumes in place.
+3. Leave persistent Jarvis and Ollama volumes in place.
 
-The immutable image tag makes application rollback independent of the persistent
-Jarvis state.
+If rolling back to a build that predates trusted-proxy identity, also restore the matching NPM configuration for that release. Keep the proxy identity secret stored even if the older build ignores it.
 
 ## Backups
 
-Back up these Docker volumes as part of the normal CamCore backup process:
+Back up:
 
-- `camcore-jarvis-data`
-- `camcore-jarvis-ollama-models` (optional if model re-download time is acceptable)
+- `camcore-jarvis-data` — required; contains sensitive runtime state;
+- `camcore-jarvis-ollama-models` — optional if model re-download time is acceptable.
 
-The Jarvis data volume is the important one. It can contain credentials, memory,
-audit data, traces, skills and session state and should be treated as sensitive.
+Treat Jarvis data backups as sensitive operational data.
 
 ## Security posture
 
-The production profile is deliberately conservative:
+The CamCore production profile is deliberately conservative:
 
-- local Ollama inference;
-- no public host ports;
-- API-key enforcement;
+- private network/reverse-proxy exposure only;
+- local Ollama inference by default;
+- separate proxy API key and trusted identity secret;
+- server-side member/admin route isolation;
 - external analytics disabled;
-- public savings/leaderboard sharing disabled in the CamCore frontend;
-- Outline MCP credentials supplied only at runtime;
-- Outline MCP traffic kept on the shared internal Docker bridge;
-- Outline MCP discovery restricted to `list_documents` and `fetch`;
-- write/shell tools disabled;
-- security profile set to `server` / `block`;
-- audit logging enabled;
-- explicit tool confirmation enabled;
+- Outline read-only knowledge access;
+- Portainer allow-listed Docker evidence;
+- Better Stack, YouTrack, Home Assistant, M365 and GitHub integrations are read-only and fixed-target/allow-listed;
+- CamCore Media uses aggregate-only Tautulli activity;
+- Synology DSM integration is discovery-only, not storage-health telemetry;
+- write/shell tools disabled by default;
+- server/block security profile;
+- secret and PII scanning;
+- SSRF protection and rate limiting;
+- audit logging;
+- explicit tool confirmation;
 - proactive actions and channels disabled.
 
-Expand permissions only when the corresponding CamCore integration has a clear
-read/write boundary, approval model and audit trail.
+Expand a capability only after its read/write boundary, approval model, secret handling and audit behaviour are explicit and tested.

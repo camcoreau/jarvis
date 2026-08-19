@@ -39,7 +39,9 @@ def _auto_preference(environment: Mapping[str, str], role: str) -> str:
         if _role(role) == "admin"
         else "CAMCORE_MEMBER_AUTO_PROVIDER"
     )
-    default = "local" if _role(role) == "admin" else "openai"
+    # CamCore is local-first for every role. Cloud inference remains an explicit
+    # option when enabled and configured.
+    default = "local"
     value = str(environment.get(key, default)).strip().lower()
     return value if value in {"local", "openai"} else default
 
@@ -181,7 +183,9 @@ def provider_status(
                     else local_model
                 ),
                 "privacy": (
-                    "cloud-possible" if normalized_role == "member" else "local-first"
+                    "cloud-possible"
+                    if default_decision.selected == "openai"
+                    else "camcore-only"
                 ),
             },
             {

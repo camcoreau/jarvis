@@ -18,9 +18,11 @@ import {
   ScrollText,
   Database,
   ShieldCheck,
+  Activity,
 } from 'lucide-react';
 import { ConversationList } from './ConversationList';
 import { useAppStore } from '../../lib/store';
+import { inferenceProviderLabel } from '../../lib/model-capabilities';
 
 export function Sidebar() {
   const navigate = useNavigate();
@@ -41,6 +43,8 @@ export function Sidebar() {
 
   const ThemeIcon = settings.theme === 'light' ? Sun : settings.theme === 'dark' ? Moon : Monitor;
   const nextTheme = settings.theme === 'light' ? 'dark' : settings.theme === 'dark' ? 'system' : 'light';
+  const activeModel = selectedModel || serverInfo?.model || '';
+  const providerLabel = inferenceProviderLabel(activeModel);
 
   const messages = useAppStore((s) => s.messages);
   const handleNewChat = () => {
@@ -60,6 +64,7 @@ export function Sidebar() {
   ];
 
   const systemNav = [
+    { path: '/runtime', icon: Activity, label: 'Runtime' },
     { path: '/logs', icon: ScrollText, label: 'Activity Logs' },
     { path: '/settings', icon: Settings, label: 'Settings' },
     { path: '/get-started', icon: Rocket, label: 'Setup' },
@@ -188,10 +193,10 @@ export function Sidebar() {
                 className="truncate block text-left font-medium"
                 style={{ color: deepResearch ? 'var(--color-accent)' : 'var(--color-text)' }}
               >
-                {deepResearch ? 'Deep Research' : selectedModel || serverInfo?.model || 'Select model'}
+                {deepResearch ? 'Deep Research' : activeModel || 'Select model'}
               </span>
               <span className="text-[10px] block text-left mt-0.5" style={{ color: 'var(--color-text-tertiary)' }}>
-                {modelLoading ? 'Loading local model…' : 'Local-first inference'}
+                {modelLoading ? 'Loading model…' : deepResearch ? 'Research agent' : providerLabel}
               </span>
             </div>
             {!modelLoading && (
