@@ -7,7 +7,11 @@ arbitrary provider payloads.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import threading
+import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,6 +20,22 @@ from fastapi import APIRouter, Request
 from openjarvis.server.camcore_access import require_admin
 
 router = APIRouter(prefix="/v1/camcore/operations", tags=["camcore-operations"])
+
+# Provider APIs have very different appropriate refresh cadences. Cache only the
+# already-sanitised model-facing summary; credentials/raw responses never enter
+# this cache. The production profile uses one worker, but the lock also makes
+# this safe for tests or future threaded access inside a process.
+_SOURCE_TTLS = {
+    "portainer": 30.0,
+    "betterstack": 60.0,
+    "youtrack": 120.0,
+    "m365": 300.0,
+    "github": 300.0,
+    "tautulli": 30.0,
+    "synology": 3600.0,
+}
+_SOURCE_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_SOURCE_CACHE_LOCK = threading.Lock()
 
 
 def _tool_ids(request: Request) -> set[str]:
@@ -207,6 +227,34 @@ def _source_from_result(source_name: str, result: Any) -> dict[str, Any]:
     }
 
 
+def _cached_source(
+    source_id: str,
+    source_name: str,
+    execute: Callable[[], Any],
+) -> dict[str, Any]:
+    """Execute a blocking provider check behind a sanitised in-process TTL cache."""
+
+    ttl = _SOURCE_TTLS[source_id]
+    now = time.monotonic()
+    with _SOURCE_CACHE_LOCK:
+        cached = _SOURCE_CACHE.get(source_id)
+        if cached is not None and now - cached[0] < ttl:
+            return {
+                **cached[1],
+                "cached": True,
+                "cache_ttl_seconds": int(ttl),
+            }
+
+    source = _source_from_result(source_name, execute())
+    with _SOURCE_CACHE_LOCK:
+        _SOURCE_CACHE[source_id] = (time.monotonic(), source)
+    return {
+        **source,
+        "cached": False,
+        "cache_ttl_seconds": int(ttl),
+    }
+
+
 @router.get("/capabilities")
 async def camcore_operations_capabilities(request: Request):
     """Return the administrator session's safe operational capability inventory."""
@@ -227,19 +275,6 @@ async def camcore_operations_overview(request: Request):
     available = {item["id"]: bool(item["available"]) for item in capabilities}
     sources: dict[str, dict[str, Any]] = {}
 
-    if available.get("docker.containers.read"):
-        from openjarvis.tools.camcore_portainer import CamCorePortainerOverviewTool
-
-        sources["portainer"] = _source_from_result(
-            "Portainer",
-            CamCorePortainerOverviewTool().execute(include_stopped=True),
-        )
-    else:
-        sources["portainer"] = _source_unavailable(
-            "Portainer",
-            "No current-session Portainer container read capability is attached.",
-        )
-
     from openjarvis.tools.camcore_integrations import (
         CamCoreBetterStackOverviewTool,
         CamCoreGitHubOverviewTool,
@@ -247,54 +282,73 @@ async def camcore_operations_overview(request: Request):
         CamCoreSynologyApiInventoryTool,
         CamCoreYouTrackOverviewTool,
     )
+    from openjarvis.tools.camcore_portainer import CamCorePortainerOverviewTool
     from openjarvis.tools.camcore_tautulli import CamCoreTautulliActivityTool
 
-    read_sources = (
+    configured_sources: list[
+        tuple[str, str, str, Callable[[], Any]]
+    ] = [
+        (
+            "portainer",
+            "docker.containers.read",
+            "Portainer",
+            lambda: CamCorePortainerOverviewTool().execute(include_stopped=True),
+        ),
         (
             "betterstack",
             "monitoring.health.read",
             "Better Stack",
-            CamCoreBetterStackOverviewTool,
+            lambda: CamCoreBetterStackOverviewTool().execute(),
         ),
         (
             "youtrack",
             "youtrack.operations.read",
             "YouTrack",
-            CamCoreYouTrackOverviewTool,
+            lambda: CamCoreYouTrackOverviewTool().execute(),
         ),
         (
             "m365",
             "m365.servicehealth.read",
             "Microsoft 365",
-            CamCoreM365ServiceHealthTool,
+            lambda: CamCoreM365ServiceHealthTool().execute(),
         ),
         (
             "github",
             "github.operations.read",
             "GitHub",
-            CamCoreGitHubOverviewTool,
+            lambda: CamCoreGitHubOverviewTool().execute(),
         ),
         (
             "tautulli",
             "media.status.read",
             "Tautulli",
-            CamCoreTautulliActivityTool,
+            lambda: CamCoreTautulliActivityTool().execute(),
         ),
         (
             "synology",
             "synology.api.discovery",
             "Synology DSM",
-            CamCoreSynologyApiInventoryTool,
+            lambda: CamCoreSynologyApiInventoryTool().execute(),
         ),
-    )
-    for source_id, capability_id, source_name, tool_class in read_sources:
-        if available.get(capability_id):
-            sources[source_id] = _source_from_result(source_name, tool_class().execute())
-        else:
+    ]
+
+    live_tasks: list[asyncio.Future[Any] | asyncio.Task[Any] | Any] = []
+    live_ids: list[str] = []
+    for source_id, capability_id, source_name, execute in configured_sources:
+        if not available.get(capability_id):
             sources[source_id] = _source_unavailable(
                 source_name,
                 f"No current-session {source_name} read capability is attached.",
             )
+            continue
+        live_ids.append(source_id)
+        live_tasks.append(
+            asyncio.to_thread(_cached_source, source_id, source_name, execute)
+        )
+
+    if live_tasks:
+        live_results = await asyncio.gather(*live_tasks)
+        sources.update(zip(live_ids, live_results, strict=True))
 
     # Home Assistant is deliberately entity-scoped: the overview does not bulk
     # enumerate states because that could expose unrelated household context.
