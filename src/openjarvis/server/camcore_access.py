@@ -84,9 +84,18 @@ def _safe_header(value: str | None, *, limit: int = 512) -> str:
     return str(value or "").strip()[:limit]
 
 
+def _secrets_match(presented: str, expected: str) -> bool:
+    try:
+        presented_bytes = presented.encode("utf-8")
+        expected_bytes = expected.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return secrets.compare_digest(presented_bytes, expected_bytes)
+
+
 def _identity_from_headers(request: Request, expected_secret: str) -> CamCoreIdentity | None:
     presented = _safe_header(request.headers.get(_PROXY_SECRET_HEADER), limit=4096)
-    if not presented or not secrets.compare_digest(presented, expected_secret):
+    if not presented or not _secrets_match(presented, expected_secret):
         return None
 
     subject = _safe_header(request.headers.get(_SUBJECT_HEADER))
