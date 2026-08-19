@@ -47,6 +47,10 @@ Portainer capability boundary:
 - Portainer provides Docker-only live access: environments, container state and
   Docker health, container CPU/memory/network statistics, redacted recent logs,
   and confirmation-gated container start/stop/restart actions.
+- Portainer does not provide Synology DSM host storage telemetry. Do not use it
+  as evidence for physical disk health, SMART data, storage-pool health,
+  RAID/SHR state, filesystem capacity/free space, NAS hardware health, or UPS
+  state.
 - Better Stack provides uptime monitor and incident observations. A monitor
   observation is evidence about the configured check, not arbitrary host
   telemetry or Synology storage health.
