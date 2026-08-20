@@ -39,18 +39,29 @@ _SOURCE_CACHE_LOCK = threading.Lock()
 
 
 def _tool_ids(request: Request) -> set[str]:
+    """Return stable tool identifiers plus concrete spec names.
+
+    MCP tools share the generic ``mcp_adapter`` tool_id, so capability detection
+    must also retain ``tool.spec.name``. Native CamCore tools continue to expose
+    their tool_id as before. Normalising namespaced spec names preserves support
+    for adapters that prefix a server name.
+    """
+
     agent = getattr(request.app.state, "agent", None)
     tools = getattr(agent, "_tools", []) if agent is not None else []
     result: set[str] = set()
     for tool in tools or []:
         tool_id = str(getattr(tool, "tool_id", "") or "").strip()
-        if not tool_id:
-            try:
-                tool_id = str(tool.spec.name or "").strip()
-            except Exception:
-                tool_id = ""
         if tool_id:
             result.add(tool_id)
+
+        try:
+            spec_name = str(tool.spec.name or "").strip()
+        except Exception:
+            spec_name = ""
+        if spec_name:
+            result.add(spec_name)
+            result.add(spec_name.rsplit(":", 1)[-1])
     return result
 
 
