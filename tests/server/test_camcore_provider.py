@@ -8,11 +8,29 @@ from openjarvis.server.camcore_provider import provider_status, resolve_provider
 
 
 class _Engine:
-    def __init__(self, models: list[str]):
+    def __init__(
+        self,
+        models: list[str],
+        *,
+        unhealthy_models: set[str] | None = None,
+    ):
         self._models = models
+        self._unhealthy_models = unhealthy_models or set()
 
     def list_models(self) -> list[str]:
         return list(self._models)
+
+    def health(self) -> bool:
+        return True
+
+    def can_serve(self, model: str) -> bool:
+        if model in self._unhealthy_models:
+            return False
+        if model in self._models:
+            return True
+        return model.startswith("gpt-") and any(
+            item.startswith("gpt-") for item in self._models
+        )
 
 
 def _env(**overrides: str) -> dict[str, str]:
@@ -101,6 +119,55 @@ def test_cloud_can_fail_closed_when_fallback_disabled():
                 CAMCORE_OPENAI_FALLBACK_LOCAL="false",
             ),
         )
+
+
+def test_status_is_not_ready_when_local_model_is_unavailable():
+    status = provider_status(
+        role="member",
+        engine=_Engine(
+            ["qwen3.5:4b", "gpt-5.4"],
+            unhealthy_models={"qwen3.5:4b"},
+        ),
+        local_model="qwen3.5:4b",
+        environment=_env(),
+    )
+    providers = {item["id"]: item for item in status["providers"]}
+
+    assert status["ready"] is False
+    assert providers["auto"]["available"] is False
+    assert providers["local"]["available"] is False
+    assert providers["openai"]["available"] is True
+
+
+def test_auto_does_not_silently_export_when_local_model_is_unavailable():
+    with pytest.raises(RuntimeError, match="Local inference is not available"):
+        resolve_provider(
+            "auto",
+            role="member",
+            engine=_Engine(
+                ["qwen3.5:4b", "gpt-5.4"],
+                unhealthy_models={"qwen3.5:4b"},
+            ),
+            local_model="qwen3.5:4b",
+            environment=_env(),
+        )
+
+
+def test_explicit_openai_remains_available_when_local_model_is_unhealthy():
+    decision = resolve_provider(
+        "openai",
+        role="member",
+        engine=_Engine(
+            ["qwen3.5:4b", "gpt-5.4"],
+            unhealthy_models={"qwen3.5:4b"},
+        ),
+        local_model="qwen3.5:4b",
+        environment=_env(),
+    )
+
+    assert decision.selected == "openai"
+    assert decision.model == "gpt-5.6"
+    assert decision.fallback_allowed is False
 
 
 def test_invalid_provider_is_rejected():

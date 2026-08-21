@@ -4,21 +4,25 @@ on:
   push:
     branches: [main]
     paths:
+      - ".github/workflows/docs.yml"
       - "docs/**"
       - "mkdocs.yml"
+      - "pyproject.toml"
       - "src/openjarvis/**"
+      - "uv.lock"
   pull_request:
     branches: [main]
     paths:
+      - ".github/workflows/docs.yml"
       - "docs/**"
       - "mkdocs.yml"
+      - "pyproject.toml"
       - "src/openjarvis/**"
+      - "uv.lock"
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: "pages"
@@ -65,15 +69,24 @@ jobs:
         run: uv run mkdocs build
 
       - name: Upload artifact
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: >-
+          github.ref == 'refs/heads/main'
+          && github.event_name != 'pull_request'
+          && vars.CAMCORE_DOCS_PAGES_ENABLED == 'true'
         uses: actions/upload-pages-artifact@v5.0.0
         with:
           path: site/
 
   deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: >-
+      github.ref == 'refs/heads/main'
+      && github.event_name != 'pull_request'
+      && vars.CAMCORE_DOCS_PAGES_ENABLED == 'true'
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

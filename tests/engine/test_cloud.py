@@ -470,6 +470,8 @@ class TestCloudEngineCanServe:
     def test_openai_only_serves_openai_models(self) -> None:
         eng = self._engine(_openai_client=object())
         assert eng.can_serve("gpt-4o") is True
+        assert eng.can_serve("gpt-5.6") is True
+        assert "gpt-5.6" in eng.list_models()
         assert eng.can_serve("claude-sonnet-4") is False
         assert eng.can_serve("gemini-2.5-pro") is False
         assert eng.can_serve("openrouter/openai/gpt-4o") is False

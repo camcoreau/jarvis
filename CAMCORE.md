@@ -50,6 +50,19 @@ Resolve conflicts on the sync branch, run the full relevant test suite, then mer
 
 The repository's branch/ruleset settings are a GitHub control-plane responsibility; source code cannot substitute for these rules.
 
+## Repository automation
+
+Relevant pull requests and `main` changes always build the documentation so
+broken pages remain a merge-blocking signal. Publishing to GitHub Pages is
+deliberately opt-in for this fork: enable Pages in the repository settings and
+set the Actions repository variable `CAMCORE_DOCS_PAGES_ENABLED=true` before
+expecting the documentation workflow to upload or deploy the site.
+
+Rolling package and desktop releases also remain dormant until the repository
+has an intentional plain baseline release tag (`vX.Y.Z`). In a tag-free fork,
+the auto-tag workflow reports that state and exits successfully rather than
+inventing a release lineage or leaving every `main` push red.
+
 ## CamCore agent
 
 `camcore_assistant` extends OpenJarvis's `orchestrator` instead of replacing it. This preserves upstream tool calling, event handling and execution behaviour while adding CamCore-specific operating rules.

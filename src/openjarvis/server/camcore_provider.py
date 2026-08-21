@@ -62,6 +62,8 @@ def openai_model(environment: Mapping[str, str] | None = None) -> str:
 
 def _engine_has_openai(engine: object, model: str) -> bool:
     try:
+        if not engine.health() or not engine.can_serve(model):
+            return False
         models = set(engine.list_models())
     except Exception:
         return False
@@ -72,6 +74,17 @@ def _engine_has_openai(engine: object, model: str) -> bool:
     # any advertised gpt-* model proves the OpenAI client is active and
     # MultiEngine can route the requested alias by prefix.
     return model.startswith("gpt-") and any(item.startswith("gpt-") for item in models)
+
+
+def _local_available(engine: object, model: str) -> bool:
+    """Return whether the configured local model is currently serviceable."""
+
+    try:
+        if not engine.health() or not engine.can_serve(model):
+            return False
+        return model in set(engine.list_models())
+    except Exception:
+        return False
 
 
 def openai_available(
@@ -120,13 +133,14 @@ def resolve_provider(
     cloud_model = openai_model(env)
     fallback = _env_bool(env, "CAMCORE_OPENAI_FALLBACK_LOCAL", True)
     cloud_available = openai_available(engine, role, env)
+    local_available = _local_available(engine, local_model)
 
     selected = request_name
     if request_name == "auto":
         selected = _auto_preference(env, role)
 
     if selected == "openai" and not cloud_available:
-        if not fallback:
+        if not fallback or not local_available:
             raise RuntimeError("OpenAI is not available for this CamCore session")
         return ProviderDecision(
             requested=request_name,
@@ -138,13 +152,16 @@ def resolve_provider(
             fallback_from="openai",
         )
 
+    if selected == "local" and not local_available:
+        raise RuntimeError("Local inference is not available for this CamCore session")
+
     return ProviderDecision(
         requested=request_name,
         selected=selected,
         model=cloud_model if selected == "openai" else local_model,
         local_model=local_model,
         openai_model=cloud_model,
-        fallback_allowed=fallback,
+        fallback_allowed=fallback and local_available,
     )
 
 
@@ -159,46 +176,45 @@ def provider_status(
 
     env = environment or os.environ
     normalized_role = _role(role)
-    available = openai_available(engine, normalized_role, env)
+    cloud_available = openai_available(engine, normalized_role, env)
+    local_available = _local_available(engine, local_model)
     cloud_model = openai_model(env)
-    default_decision = resolve_provider(
-        "auto",
-        role=normalized_role,
-        engine=engine,
-        local_model=local_model,
-        environment=env,
-    )
+    auto_resolved = _auto_preference(env, normalized_role)
+    auto_available = local_available
+    if auto_resolved == "openai":
+        if cloud_available:
+            auto_available = True
+        elif _env_bool(env, "CAMCORE_OPENAI_FALLBACK_LOCAL", True):
+            auto_resolved = "local"
+            auto_available = local_available
+        else:
+            auto_available = False
     return {
+        "ready": auto_available,
         "default": "auto",
-        "autoResolved": default_decision.selected,
+        "autoResolved": auto_resolved,
         "fallbackLocal": _env_bool(env, "CAMCORE_OPENAI_FALLBACK_LOCAL", True),
         "providers": [
             {
                 "id": "auto",
                 "label": "Auto",
-                "available": True,
-                "model": (
-                    cloud_model
-                    if default_decision.selected == "openai"
-                    else local_model
-                ),
+                "available": auto_available,
+                "model": (cloud_model if auto_resolved == "openai" else local_model),
                 "privacy": (
-                    "cloud-possible"
-                    if default_decision.selected == "openai"
-                    else "camcore-only"
+                    "cloud-possible" if auto_resolved == "openai" else "camcore-only"
                 ),
             },
             {
                 "id": "local",
                 "label": "Local",
-                "available": True,
+                "available": local_available,
                 "model": local_model,
                 "privacy": "camcore-only",
             },
             {
                 "id": "openai",
                 "label": "OpenAI",
-                "available": available,
+                "available": cloud_available,
                 "model": cloud_model,
                 "privacy": "cloud",
             },

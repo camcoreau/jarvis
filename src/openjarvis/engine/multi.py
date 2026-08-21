@@ -128,6 +128,15 @@ class MultiEngine(InferenceEngine):
         self._refresh_map()
         return self._model_key_map.get(model)
 
+    def can_serve(self, model: str) -> bool:
+        """Return whether the backend selected for *model* is healthy."""
+
+        try:
+            engine = self._engine_for(model)
+            return engine.can_serve(model) and engine.health()
+        except Exception:
+            return False
+
     def health(self) -> bool:
         return any(engine.health() for _key, engine in self._engines)
 
