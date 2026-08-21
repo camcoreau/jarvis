@@ -113,6 +113,7 @@ Jarvis is deployed as a private Portainer Git stack behind the CamCore reverse p
 
 - publishes no host port;
 - keeps Ollama off the proxy network;
+- exposes Ollama to the separately managed AI frontend only through the explicit private `camcore-ai-backend` Docker network;
 - uses immutable GHCR commit-SHA image tags;
 - runs Jarvis with a read-only root filesystem;
 - drops all Linux capabilities;
