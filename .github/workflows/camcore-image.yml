@@ -48,6 +48,7 @@ jobs:
         env:
           CAMCORE_JARVIS_RELEASE: ci
           CAMCORE_JARVIS_MODEL: qwen3.5:4b
+          CAMCORE_AI_NETWORK: ci-ai-backend
           CAMCORE_PROXY_NETWORK: ci-proxy
           OPENJARVIS_API_KEY: oj_sk_ci_validation_only
           CAMCORE_PROXY_IDENTITY_SECRET: proxy_identity_ci_validation_only
@@ -75,6 +76,7 @@ jobs:
           set +e
           CAMCORE_JARVIS_RELEASE=ci \
           CAMCORE_JARVIS_MODEL=qwen3.5:4b \
+          CAMCORE_AI_NETWORK=ci-ai-backend \
           CAMCORE_PROXY_NETWORK=ci-proxy \
           CAMCORE_PROXY_IDENTITY_SECRET=proxy_identity_ci_validation_only \
           CAMCORE_OUTLINE_API_KEY=outline_ci_validation_only \
@@ -83,6 +85,7 @@ jobs:
 
           CAMCORE_JARVIS_RELEASE=ci \
           CAMCORE_JARVIS_MODEL=qwen3.5:4b \
+          CAMCORE_AI_NETWORK=ci-ai-backend \
           CAMCORE_PROXY_NETWORK=ci-proxy \
           OPENJARVIS_API_KEY=oj_sk_ci_validation_only \
           CAMCORE_OUTLINE_API_KEY=outline_ci_validation_only \
@@ -91,6 +94,7 @@ jobs:
 
           CAMCORE_JARVIS_RELEASE=ci \
           CAMCORE_JARVIS_MODEL=qwen3.5:4b \
+          CAMCORE_AI_NETWORK=ci-ai-backend \
           CAMCORE_PROXY_NETWORK=ci-proxy \
           OPENJARVIS_API_KEY=oj_sk_ci_validation_only \
           CAMCORE_PROXY_IDENTITY_SECRET=proxy_identity_ci_validation_only \
