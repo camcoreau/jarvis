@@ -12,7 +12,9 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from openjarvis.core.events import EventBus, EventType  # noqa: E402
 from openjarvis.core.types import Role  # noqa: E402
+from openjarvis.engine._stubs import InferenceEngine  # noqa: E402
 from openjarvis.server.app import create_app  # noqa: E402
+from openjarvis.telemetry.instrumented_engine import InstrumentedEngine  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -54,6 +56,24 @@ def _make_agent(content="Hello from agent"):
     agent.agent_id = "mock"
     agent.run.return_value = AgentResult(content=content, turns=1)
     return agent
+
+
+class _ReachableLocalEngine(InferenceEngine):
+    """Local engine whose service is up but configured model was removed."""
+
+    engine_id = "local-test"
+
+    def generate(self, messages, *, model, **kwargs):
+        return {"content": "unused", "usage": {}}
+
+    async def stream(self, messages, *, model, **kwargs):
+        yield "unused"
+
+    def list_models(self):
+        return ["different-model"]
+
+    def health(self):
+        return True
 
 
 def _test_config():
@@ -1224,6 +1244,27 @@ class TestHealthEndpoint:
         client = TestClient(app)
         resp = client.get("/health")
         assert resp.status_code == 503
+
+    def test_unavailable_default_model_is_not_ready(self):
+        engine = _make_engine(models=["unavailable-model"])
+        engine.health.return_value = True
+        engine.can_serve.return_value = False
+        app = create_app(engine, "unavailable-model", config=_test_config())
+        client = TestClient(app)
+
+        resp = client.get("/health")
+
+        assert resp.status_code == 503
+        engine.can_serve.assert_called_once_with("unavailable-model")
+
+    def test_wrapped_local_engine_without_configured_model_is_not_ready(self):
+        engine = InstrumentedEngine(_ReachableLocalEngine(), EventBus())
+        app = create_app(engine, "removed-model", config=_test_config())
+        client = TestClient(app)
+
+        assert engine.health() is True
+        assert engine.can_serve("removed-model") is True
+        assert client.get("/health").status_code == 503
 
 
 # ---------------------------------------------------------------------------

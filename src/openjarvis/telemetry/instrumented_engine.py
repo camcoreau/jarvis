@@ -505,6 +505,9 @@ class InstrumentedEngine(InferenceEngine):
     def list_models(self) -> List[str]:
         return self._inner.list_models()
 
+    def can_serve(self, model: str) -> bool:
+        return self._inner.can_serve(model)
+
     def health(self) -> bool:
         return self._inner.health()
 

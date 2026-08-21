@@ -102,6 +102,19 @@ async def test_guardrails_delegates_stream_full():
     assert result[1].finish_reason == "stop"
 
 
+def test_transparent_wrappers_delegate_model_routing_checks():
+    inner = _FakeStreamFullEngine([])
+    inner.can_serve = lambda model: model == "fake-model"
+
+    instrumented = InstrumentedEngine(inner, EventBus())
+    guarded = GuardrailsEngine(inner, scanners=[])
+
+    assert instrumented.can_serve("fake-model") is True
+    assert instrumented.can_serve("missing") is False
+    assert guarded.can_serve("fake-model") is True
+    assert guarded.can_serve("missing") is False
+
+
 # ---------------------------------------------------------------------------
 # MultiEngine.stream_full routing
 # ---------------------------------------------------------------------------
@@ -143,3 +156,19 @@ async def test_multi_routes_stream_full_by_model():
         result_b.append(chunk)
 
     assert result_b[0].content == "from B"
+
+
+def test_multi_readiness_requires_the_selected_backend_to_be_healthy():
+    engine_a = _FakeStreamFullEngine([])
+    engine_a.list_models = lambda: ["model-a"]
+    engine_a.health = lambda: False
+
+    engine_b = _FakeStreamFullEngine([])
+    engine_b.list_models = lambda: ["model-b"]
+
+    multi = MultiEngine([("a", engine_a), ("b", engine_b)])
+
+    assert multi.health() is True
+    assert multi.can_serve("model-a") is False
+    assert multi.can_serve("model-b") is True
+    assert multi.can_serve("missing") is False

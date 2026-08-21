@@ -1303,9 +1303,15 @@ async def server_info(request: Request):
 
 @router.get("/health")
 async def health(request: Request):
-    """Health check endpoint."""
+    """Report readiness for the server's configured default model."""
     engine = request.app.state.engine
-    healthy = engine.health()
+    model = str(getattr(request.app.state, "model", "") or "").strip()
+    try:
+        healthy = engine.health()
+        if healthy and model:
+            healthy = model in set(engine.list_models()) and engine.can_serve(model)
+    except Exception:
+        healthy = False
     if not healthy:
         raise HTTPException(status_code=503, detail="Engine unhealthy")
     return {"status": "ok"}

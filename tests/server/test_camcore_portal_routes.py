@@ -263,8 +263,28 @@ def test_provider_status_never_exposes_openai_key(monkeypatch):
     response = client.get("/v1/camcore/portal/providers?role=member")
 
     assert response.status_code == 200
+    assert response.json()["ready"] is True
     assert response.json()["autoResolved"] == "local"
     assert "do-not-return-this" not in response.text
+
+
+def test_provider_status_reports_unready_local_model(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "configured-cloud-token")
+    engine = _engine()
+    engine.list_models.return_value = ["server-model", "gpt-5.4"]
+    engine.can_serve.side_effect = lambda model: model != "server-model"
+    app = create_app(engine, "server-model", config=_config())
+    client = TestClient(app)
+
+    response = client.get("/v1/camcore/portal/providers?role=member")
+
+    assert response.status_code == 200
+    payload = response.json()
+    providers = {item["id"]: item for item in payload["providers"]}
+    assert payload["ready"] is False
+    assert providers["auto"]["available"] is False
+    assert providers["local"]["available"] is False
+    assert providers["openai"]["available"] is True
 
 
 def test_member_chat_requires_user_message():
@@ -282,3 +302,17 @@ def test_member_chat_requires_user_message():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "A user message is required"
+
+
+def test_portal_routes_are_registered_once():
+    app = create_app(_engine(), "server-model", config=_config())
+    expected_paths = {
+        "/v1/camcore/portal/identity",
+        "/v1/camcore/portal/providers",
+        "/v1/camcore/portal/chat/completions",
+        "/v1/camcore/portal/operations/chat/completions",
+    }
+    registered_paths = [route.path for route in app.routes]
+
+    for path in expected_paths:
+        assert registered_paths.count(path) == 1
