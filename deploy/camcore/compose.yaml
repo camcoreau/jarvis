@@ -30,16 +30,25 @@ services:
 
   ollama:
     <<: *runtime
-    image: ollama/ollama:0.30.10@sha256:bfc9c6d53cc6989aa5131a6fde6b162b2802d4d337657f3253b5f69579bddeee
+    image: ollama/ollama:0.32.15@sha256:57d60e686821ea81a7748a3ec8141308c8b8f95b27105713954abf7a6529e700
     container_name: camcore-jarvis-ollama
     environment:
+      OLLAMA_NO_CLOUD: "1"
+      OLLAMA_CONTEXT_LENGTH: "${CAMCORE_OLLAMA_CONTEXT_LENGTH:-8192}"
+      OLLAMA_MAX_LOADED_MODELS: "${CAMCORE_OLLAMA_MAX_LOADED_MODELS:-1}"
+      OLLAMA_NUM_PARALLEL: "${CAMCORE_OLLAMA_NUM_PARALLEL:-1}"
+      OLLAMA_MAX_QUEUE: "${CAMCORE_OLLAMA_MAX_QUEUE:-32}"
+      OLLAMA_KEEP_ALIVE: "${CAMCORE_OLLAMA_KEEP_ALIVE:-10m}"
       TZ: ${CAMCORE_TZ:-Australia/Melbourne}
     expose:
       - "11434"
     volumes:
       - ollama-models:/root/.ollama
     networks:
-      - ai
+      ai:
+        aliases:
+          - camcore-ollama
+      jarvis-ai:
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 10s
@@ -48,10 +57,11 @@ services:
       start_period: 20s
 
   ollama-model:
-    image: ollama/ollama:0.30.10@sha256:bfc9c6d53cc6989aa5131a6fde6b162b2802d4d337657f3253b5f69579bddeee
+    image: ollama/ollama:0.32.15@sha256:57d60e686821ea81a7748a3ec8141308c8b8f95b27105713954abf7a6529e700
     container_name: camcore-jarvis-model-init
     environment:
       OLLAMA_HOST: http://ollama:11434
+      OLLAMA_NO_CLOUD: "1"
       TZ: ${CAMCORE_TZ:-Australia/Melbourne}
     command:
       - pull
@@ -60,7 +70,7 @@ services:
       ollama:
         condition: service_healthy
     networks:
-      - ai
+      - jarvis-ai
     restart: "no"
 
   jarvis:
@@ -125,7 +135,7 @@ services:
     expose:
       - "8000"
     networks:
-      - ai
+      - jarvis-ai
       - proxy
     depends_on:
       jarvis-data-init:
@@ -157,6 +167,9 @@ volumes:
 
 networks:
   ai:
+    external: true
+    name: ${CAMCORE_AI_NETWORK:-camcore-ai-backend}
+  jarvis-ai:
     name: camcore-jarvis-ai
     driver: bridge
   proxy:
