@@ -9,10 +9,18 @@ This directory defines the private CamCore production deployment for Jarvis. It 
 - `camcore-jarvis-model-init` ensures the selected Ollama model is present before Jarvis starts.
 - `camcore-jarvis-data` persists Jarvis databases, traces, skills, sessions and other runtime state.
 - `camcore-jarvis-ollama-models` persists downloaded model data.
+- Jarvis and Ollama communicate over the internal `camcore-jarvis-ai` network.
+- Ollama is the only service from this stack attached to the pre-created external `${CAMCORE_AI_NETWORK:-camcore-ai-backend}` network.
+- The separately managed AI frontend stack can therefore reach Ollama without joining Jarvis's internal network or receiving any Jarvis credential.
 - Jarvis joins the Docker network shared with NPM. Ollama does not.
 - No service in this stack publishes a host port.
 - The production `config.toml` is baked into the immutable Jarvis image at `/etc/openjarvis/camcore-config.toml`.
 - Outline is available through its internal MCP endpoint with read-only tool discovery.
+
+The public AI frontend is a separate deployment with its own repository,
+identity configuration, data volume, lifecycle and rollback. This repository
+owns only Jarvis, the shared Ollama inference service and the private network
+contract; frontend-specific secrets and configuration do not belong here.
 
 Jarvis remains a private CamCore service. Do not create public DNS or a public unauthenticated proxy path for the administrator UI.
 
@@ -60,6 +68,7 @@ Set:
 ```dotenv
 CAMCORE_JARVIS_RELEASE=<published main commit SHA>
 CAMCORE_JARVIS_MODEL=qwen3.5:4b
+CAMCORE_AI_NETWORK=camcore-ai-backend
 CAMCORE_PROXY_NETWORK=<existing NPM Docker network>
 OPENJARVIS_API_KEY=<generated secret>
 CAMCORE_ACCESS_MODE=trusted-proxy
@@ -69,6 +78,13 @@ CAMCORE_TZ=Australia/Melbourne
 ```
 
 Generate the two Jarvis/proxy secrets independently. Do not reuse the Portainer, Outline or provider credentials.
+
+`CAMCORE_AI_NETWORK` must name a pre-created, private bridge network shared
+with the separately managed AI frontend stack. Keep the default
+`camcore-ai-backend` unless the matching frontend deployment uses a different
+explicit name. Do not attach NPM, databases, Jarvis or unrelated workloads to
+this network. The stable inference endpoint on this network is
+`http://camcore-ollama:11434`.
 
 ## 2. Optional read-only Operations integrations
 
@@ -207,6 +223,13 @@ Use:
 
 The compose file intentionally relies on named volumes and the immutable image rather than bind-mounting Portainer's temporary Git checkout.
 
+Before the first deployment, create a private bridge network named
+`camcore-ai-backend` (or the exact `CAMCORE_AI_NETWORK` value) in the same
+Docker environment. Compose treats it as external and fails closed when the
+network is absent. Attach only Ollama and the separately managed AI frontend to
+it; configure that frontend to use `http://camcore-ollama:11434`. Jarvis remains
+on `camcore-jarvis-ai` plus the NPM proxy network.
+
 ## 5. Reverse proxy configuration
 
 Create the private proxy host:
@@ -318,6 +341,7 @@ The CamCore production profile is deliberately conservative:
 
 - private network/reverse-proxy exposure only;
 - local Ollama inference by default;
+- an explicit cross-stack AI network on which Ollama is the only Jarvis-stack service;
 - separate proxy API key and trusted identity secret;
 - server-side member/admin route isolation;
 - external analytics disabled;
