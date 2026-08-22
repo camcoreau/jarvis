@@ -34,6 +34,7 @@ services:
     container_name: camcore-jarvis-ollama
     environment:
       OLLAMA_NO_CLOUD: "1"
+      OLLAMA_IGPU_ENABLE: "1"
       OLLAMA_CONTEXT_LENGTH: "${CAMCORE_OLLAMA_CONTEXT_LENGTH:-8192}"
       OLLAMA_MAX_LOADED_MODELS: "${CAMCORE_OLLAMA_MAX_LOADED_MODELS:-1}"
       OLLAMA_NUM_PARALLEL: "${CAMCORE_OLLAMA_NUM_PARALLEL:-1}"
@@ -44,6 +45,8 @@ services:
       - "11434"
     volumes:
       - ollama-models:/root/.ollama
+    devices:
+      - /dev/dri:/dev/dri
     networks:
       ai:
         aliases:

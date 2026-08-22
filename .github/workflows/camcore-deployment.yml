@@ -1,0 +1,97 @@
+name: Validate CamCore Jarvis deployment
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "deploy/camcore/**"
+      - ".github/workflows/camcore-deployment.yml"
+  push:
+    branches: [main]
+    paths:
+      - "deploy/camcore/**"
+      - ".github/workflows/camcore-deployment.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: camcore-jarvis-deployment-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  validate:
+    name: Validate production contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Render production compose
+        env:
+          CAMCORE_JARVIS_RELEASE: 0123456789abcdef0123456789abcdef01234567
+          CAMCORE_JARVIS_MODEL: qwen3.5:4b
+          CAMCORE_AI_NETWORK: camcore-ai-backend
+          CAMCORE_PROXY_NETWORK: npm-backend
+          OPENJARVIS_API_KEY: ci-openjarvis-key
+          CAMCORE_ACCESS_MODE: trusted-proxy
+          CAMCORE_PROXY_IDENTITY_SECRET: ci-proxy-secret
+          CAMCORE_OUTLINE_API_KEY: ci-outline-key
+        run: >-
+          docker compose -f deploy/camcore/compose.yaml config --format json
+          > /tmp/camcore-jarvis.json
+
+      - name: Enforce GPU deployment contract
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+
+          rendered = json.loads(Path("/tmp/camcore-jarvis.json").read_text())
+          services = rendered["services"]
+
+          assert set(services) == {
+              "jarvis-data-init",
+              "ollama",
+              "ollama-model",
+              "jarvis",
+          }
+
+          for name, service in services.items():
+              assert not service.get("ports"), f"{name} must not publish host ports"
+
+          ollama = services["ollama"]
+          env = ollama["environment"]
+          assert env.get("OLLAMA_NO_CLOUD") == "1"
+          assert env.get("OLLAMA_IGPU_ENABLE") == "1"
+          assert env.get("OLLAMA_VULKAN") not in {"0", "false", "False"}
+
+          devices = ollama.get("devices") or []
+          mapped = set()
+          for device in devices:
+              if isinstance(device, str):
+                  mapped.add(device)
+              elif isinstance(device, dict):
+                  source = device.get("source")
+                  target = device.get("target")
+                  mapped.add(f"{source}:{target}")
+          assert "/dev/dri:/dev/dri" in mapped, "Ollama must receive /dev/dri"
+
+          assert not services["jarvis"].get("devices"), "Jarvis must not receive GPU devices"
+          assert not services["ollama-model"].get("devices"), "model init must not receive GPU devices"
+          assert not services["jarvis-data-init"].get("devices"), "data init must not receive GPU devices"
+
+          ai_network = rendered["networks"]["ai"]["name"]
+          assert ai_network == "camcore-ai-backend"
+
+          runbook = Path("deploy/camcore/GPU.md").read_text()
+          assert "OLLAMA_IGPU_ENABLE=1" in runbook
+          assert "/dev/dri/renderD128" in runbook
+
+      - name: Validate compose source remains explicit
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'OLLAMA_IGPU_ENABLE: "1"' deploy/camcore/compose.yaml
+          grep -Fq -- '- /dev/dri:/dev/dri' deploy/camcore/compose.yaml
